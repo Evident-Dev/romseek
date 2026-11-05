@@ -70,6 +70,24 @@ romseek creates a qBittorrent category `roms` on first start.
 
 See `.env.example`. Everything except `PROWLARR_KEY` has a default.
 
+## Homepage widget
+
+`GET /api/stats` returns `{"pending": n, "roms": n, "platforms": n}` for dashboard tiles. For [Homepage](https://gethomepage.dev):
+
+```yaml
+- RomSeek:
+    icon: https://raw.githubusercontent.com/Evident-Dev/romseek/main/logo.svg
+    href: https://roms.example.com
+    widget:
+      type: customapi
+      url: http://romseek:8000/api/stats
+      refreshInterval: 30000
+      mappings:
+        - { field: pending, label: Pending, format: number }
+        - { field: roms, label: ROMs, format: number }
+        - { field: platforms, label: Platforms, format: number }
+```
+
 ## Notes
 
 - Some indexers miscategorise PC releases as Console. Results that can't be matched to a platform sort last, and `EXCLUDED_INDEXERS` hides indexers entirely.

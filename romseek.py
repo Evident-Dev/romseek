@@ -794,6 +794,14 @@ class H(BaseHTTPRequestHandler):
             if u.path == "/api/config":
                 return self.send(200, {"romm": ROMM_PUBLIC, "linked": bool(ROMM_TOKEN),
                                        "romm_error": romm_index()["error"]})
+            if u.path == "/api/stats":
+                # For dashboard widgets (e.g. Homepage "customapi"): small, cheap counts.
+                try:
+                    pending = sum(1 for q in queue() if q["state"] in ("downloading", "waiting"))
+                except Exception:
+                    pending = None
+                return self.send(200, {"pending": pending, "roms": len(library()),
+                                       "platforms": sum(1 for s_, _, _ in PLATFORMS if platform_exists(s_))})
             if u.path == "/api/library":
                 return self.send(200, library())
             if u.path == "/api/queue":
