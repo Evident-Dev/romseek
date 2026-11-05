@@ -1,4 +1,6 @@
-# romseek
+<img src="logo.svg" width="96" alt="RomSeek logo">
+
+# RomSeek
 
 A small web app that adds a "Sonarr/Radarr for games" workflow on top of [RomM](https://github.com/rommapp/romm):
 
