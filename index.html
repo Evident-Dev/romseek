@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RomSeek</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20stroke%3D%22%235b9bd5%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22square%22%20stroke-linejoin%3D%22miter%22%3E%3Cpath%20d%3D%22M4%202.5h10.5l3%203v5.2%22/%3E%3Cpath%20d%3D%22M4%202.5v19h7.2%22/%3E%3Crect%20x%3D%227%22%20y%3D%225.5%22%20width%3D%227%22%20height%3D%224.6%22/%3E%3Cpath%20d%3D%22M7%2018.6v-2.4M9.6%2018.6v-2.4%22/%3E%3Ccircle%20cx%3D%2216.6%22%20cy%3D%2216.4%22%20r%3D%223.9%22/%3E%3Cpath%20d%3D%22M19.5%2019.3L22%2021.8%22/%3E%3Cpath%20d%3D%22M16.6%2014.6v3.6M14.8%2016.4h3.6%22%20stroke-width%3D%221.2%22/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -138,7 +139,7 @@ dialog .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
 /* ===== Dramatis theme ======================================================
    Palette, type, 2px corners and hover corner-brackets from the Dramatis site
    stylesheet (github.com/Evident-Dev/Dramatis, website/styles.css), so RomSeek
-   matches dramatis.studio and the Havoc homepages. Overrides the base styles above. */
+   matches dramatis.studio and the Havoc homepages (the RomSeek logo is its own). Overrides the base styles above. */
 :root{--bg:#0a0c10;--bg-2:#0f1218;--panel:#12161d;--panel2:#1a1f28;--line:#242a35;--line-strong:#353d4b;
   --text:#e8eaef;--muted:#99a1b0;--accent:#5b9bd5;--accent-2:#8a7ff0;--ok:#67c275;--warn:#e0a042;--bad:#e0566f;
   --radius:2px;--display:'Chakra Petch',Inter,system-ui,sans-serif}
@@ -148,7 +149,7 @@ h1,h2,h3,h4{font-family:var(--display);font-weight:600;text-transform:uppercase;
 /* header + nav */
 header{background:rgba(10,12,16,.9);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
 .brand{display:flex;align-items:center;gap:10px}
-.brand-mark{color:var(--accent);font-size:15px;letter-spacing:0}
+.brand-logo{color:var(--accent);flex:none;filter:drop-shadow(0 0 6px rgba(91,155,213,.45))}
 .brand-name{font-family:var(--display);font-weight:600;font-size:19px;letter-spacing:.32em;text-transform:uppercase}
 .top a{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .top a:hover{color:var(--accent)}
@@ -228,7 +229,7 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
 </head>
 <body>
 <header>
-  <div class="top"><h1 class="brand"><span class="brand-mark">◢◤</span><span class="brand-name">RomSeek</span></h1><a id="rommLink" href="#" target="_blank" rel="noopener">Open RomM →</a></div>
+  <div class="top"><h1 class="brand"><svg class="brand-logo" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M4 2.5h10.5l3 3v5.2"/><path d="M4 2.5v19h7.2"/><rect x="7" y="5.5" width="7" height="4.6"/><path d="M7 18.6v-2.4M9.6 18.6v-2.4"/><circle cx="16.6" cy="16.4" r="3.9"/><path d="M19.5 19.3L22 21.8"/><path d="M16.6 14.6v3.6M14.8 16.4h3.6" stroke-width="1.2"/></svg><span class="brand-name">RomSeek</span></h1><a id="rommLink" href="#" target="_blank" rel="noopener">Open RomM →</a></div>
   <nav>
     <button data-tab="download">Download games</button>
     <button data-tab="platforms">Platforms &amp; BIOS</button>
