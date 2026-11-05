@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ROM Search</title>
+<style>
+:root{--bg:#0f1115;--panel:#181b22;--panel2:#1f232c;--line:#2a2f3a;--text:#e6e8ee;--muted:#8b93a7;--accent:#7c9cff;--ok:#4cc38a;--warn:#e5b454;--bad:#ef6b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+a{color:var(--accent);text-decoration:none}
+header{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--line)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px 0;max-width:1100px;margin:0 auto}
+.top h1{font-size:18px;margin:0}
+.top a{font-size:14px}
+nav{display:flex;gap:4px;padding:0 12px;max-width:1100px;margin:6px auto 0;overflow-x:auto}
+nav button{background:none;border:0;border-bottom:2px solid transparent;border-radius:0;color:var(--muted);font-weight:600;padding:10px 12px;white-space:nowrap}
+nav button.on{color:var(--text);border-bottom-color:var(--accent)}
+nav .count{display:inline-block;min-width:18px;padding:0 6px;margin-left:6px;border-radius:99px;background:var(--accent);color:#0b0d12;font-size:12px;line-height:18px}
+main{max-width:1100px;margin:0 auto;padding:16px}
+section.tab{display:none}section.tab.on{display:block}
+form.row,.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input,select,button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+input[type=search]{flex:1 1 260px;min-width:0}
+button{cursor:pointer;background:var(--accent);border-color:var(--accent);color:#0b0d12;font-weight:600}
+button:disabled{opacity:.5;cursor:default}
+button.ghost{background:transparent;color:var(--accent)}
+button.sm{padding:5px 10px;font-size:13px}
+h2{font-size:13px;color:var(--muted);font-weight:600;margin:26px 0 10px;text-transform:uppercase;letter-spacing:.05em}
+h2:first-child{margin-top:4px}
+.help{color:var(--muted);font-size:13px;margin:8px 0 0}
+.msg{color:var(--muted);padding:12px 0}
+.err{color:var(--bad)}
+table{width:100%;border-collapse:collapse}
+td,th{padding:9px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{color:var(--muted);font-weight:500;font-size:13px}
+td.t{word-break:break-word}
+td.n{white-space:nowrap;color:var(--muted);font-variant-numeric:tabular-nums}
+td.a{white-space:nowrap;text-align:right}
+td.a select{padding:6px 8px;max-width:190px}
+.pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;border:1px solid var(--line);white-space:nowrap;color:var(--muted)}
+.good,.imported{color:var(--ok);border-color:var(--ok)}
+.need,.blocked{color:var(--bad);border-color:var(--bad)}
+.soft,.waiting,.downloading{color:var(--warn);border-color:var(--warn)}
+.bar{height:4px;background:var(--line);border-radius:2px;margin-top:5px}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:2px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.card .h{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.card b{font-weight:600}
+.card .sub{color:var(--muted);font-size:13px}
+.card .tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.card.add{cursor:pointer;background:var(--panel2);border-style:dashed}
+.card.add:hover{border-color:var(--accent)}
+.files{color:var(--muted);font-size:12px;word-break:break-all}
+.panel{background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:14px;margin-top:10px}
+.panel .h{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.stat b{display:block;font-size:20px}.stat span{color:var(--muted);font-size:12px}
+.ptabs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px}
+.ptabs button{background:var(--panel);color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:5px 12px;font-size:13px;font-weight:600}
+.ptabs button.on{background:var(--accent);border-color:var(--accent);color:#0b0d12}
+.ptabs button span{opacity:.7;margin-left:4px;font-weight:500}
+.phead{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.phead .txt{color:var(--muted);font-size:14px;flex:1 1 280px}
+.phead .txt b{color:var(--text)}
+a.btn{display:inline-block;background:var(--accent);color:#0b0d12;font-weight:600;border-radius:8px;padding:6px 12px;font-size:13px;white-space:nowrap}
+a.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.empty{background:var(--panel);border:1px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted)}
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;max-width:460px;width:calc(100% - 32px);padding:20px}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+dialog h3{margin:0 0 8px;font-size:17px}
+dialog p{margin:6px 0;color:var(--muted)}
+dialog label{display:flex;gap:8px;align-items:flex-start;margin:12px 0;color:var(--text)}
+dialog label input{margin-top:4px}
+dialog .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:50;max-width:calc(100% - 32px)}
+.toast{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;padding:10px 14px;box-shadow:0 6px 24px rgba(0,0,0,.4);animation:tin .15s ease-out}
+.toast.bad{border-left-color:var(--bad)}.toast.good{border-left-color:var(--ok)}
+@keyframes tin{from{transform:translateY(8px);opacity:0}}
+@media (max-width:700px){
+  thead{display:none}
+  tr{display:block;border-bottom:1px solid var(--line);padding:8px 0}
+  td{display:inline-block;border:0;padding:3px 6px}
+  td.t{display:block}td.a{display:block;text-align:left}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="top"><h1>ROM Search</h1><a id="rommLink" href="#" target="_blank" rel="noopener">Open RomM →</a></div>
+  <nav>
+    <button data-tab="download">Download games</button>
+    <button data-tab="platforms">Platforms &amp; BIOS</button>
+    <button data-tab="library">Library<span class="count" id="actCount" hidden></span></button>
+  </nav>
+</header>
+
+<main>
+<!-- ============ DOWNLOAD ============ -->
+<section class="tab" id="tab-download">
+  <form class="row" id="f">
+    <input type="search" id="q" placeholder="Game name, e.g. Chrono Trigger" autocomplete="off">
+    <button id="go">Search</button>
+  </form>
+  <p class="help">Check the platform on each result, then <b>Grab</b>. If that platform isn't set up in RomM yet, you'll be asked to add it first. Progress shows in the <a href="#library">Library</a> tab.</p>
+  <div id="res"></div>
+</section>
+
+<!-- ============ PLATFORMS ============ -->
+<section class="tab" id="tab-platforms">
+  <h2>Your platforms</h2>
+  <div id="mine"></div>
+
+  <div class="panel" id="biosPanel" hidden>
+    <div class="h"><b id="biosTitle"></b><button class="sm ghost" id="biosClose">Close</button></div>
+    <form class="row" id="bf"><input type="search" id="bq"><button>Search</button></form>
+    <p class="help" id="biosHelp"></p>
+    <div id="bres"></div>
+  </div>
+
+  <h2>Add a platform</h2>
+  <p class="help" style="margin:0 0 10px">Adding a platform creates it in RomM so games can be downloaded into it. Platforms marked <span class="pill need">BIOS required</span> need firmware files before games will play.</p>
+  <div class="cards" id="avail"></div>
+</section>
+
+<!-- ============ LIBRARY ============ -->
+<section class="tab" id="tab-library">
+  <h2>Activity</h2>
+  <div id="activity"></div>
+
+  <h2>In RomM</h2>
+  <div class="stats" id="stats"></div>
+  <div class="ptabs" id="ptabs"></div>
+  <div id="phead"></div>
+  <div class="row" style="margin:10px 0 6px"><input type="search" id="lq" placeholder="Filter by name"></div>
+  <div id="lib"></div>
+</section>
+</main>
+
+<div class="toasts" id="toasts"></div>
+
+<dialog id="dlg">
+  <h3 id="dTitle"></h3>
+  <p id="dBody"></p>
+  <p id="dBiosNote" style="color:var(--text)" hidden></p>
+  <p id="dWarn" style="color:var(--warn)"></p>
+  <div class="btns"><button class="ghost" id="dCancel">Cancel</button><button id="dOk"></button></div>
+</dialog>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const size = b => !b ? '—' : b > 1e9 ? (b/1e9).toFixed(1)+' GB' : b > 1e6 ? (b/1e6).toFixed(b > 1e7 ? 0 : 1)+' MB' : Math.max(1, Math.round(b/1e3))+' KB';
+const ago = t => { const s = Date.now()/1000 - t; return s < 3600 ? Math.max(1, Math.round(s/60))+'m ago' : s < 86400 ? Math.round(s/3600)+'h ago' : Math.round(s/86400)+'d ago'; };
+let PLAT = [];
+const P = s => PLAT.find(p => p.slug === s) || {slug:s, label:s || '—'};
+
+function toast(msg, kind) {
+  const t = document.createElement('div'); t.className = 'toast ' + (kind || ''); t.textContent = msg;
+  $('#toasts').appendChild(t); setTimeout(() => t.remove(), kind === 'bad' ? 8000 : 4000);
+}
+async function api(path, body) {
+  const r = await fetch(path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)} : {});
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(d.error || r.statusText); e.status = r.status; e.data = d; throw e; }
+  return d;
+}
+const biosNeed = p => !p.bios ? '' : p.bios_files ? `<span class="pill good">BIOS ✓</span>`
+  : `<span class="pill ${p.bios === 'required' ? 'need' : 'soft'}">BIOS ${esc(p.bios)}</span>`;
+
+/* ---------------- tabs ---------------- */
+function show(tab) {
+  if (!['download','platforms','library'].includes(tab)) tab = 'download';
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  document.querySelectorAll('section.tab').forEach(s => s.classList.toggle('on', s.id === 'tab-' + tab));
+  if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
+  if (tab === 'library') loadLibrary();
+  if (tab === 'download') $('#q').focus();
+}
+document.querySelector('nav').onclick = e => { const b = e.target.closest('button'); if (b) show(b.dataset.tab); };
+window.onhashchange = () => show(location.hash.slice(1));
+
+/* ---------------- popup ---------------- */
+// Asks to add a platform. Resolves {wantBios} once added, or null if cancelled.
+// Platforms that need BIOS (required/recommended) go straight to the BIOS picker after.
+function addPlatformDialog(p, forGame) {
+  return new Promise(resolve => {
+    const pickBios = !!p.bios && p.bios !== 'optional' && !p.bios_files;
+    $('#dTitle').textContent = forGame ? `${p.label} isn't set up yet` : `Add ${p.label}?`;
+    $('#dBody').textContent = forGame
+      ? `This game needs the ${p.label} platform in RomM. Add it now and the download will start straight after.`
+      : `Creates the ${p.label} platform in RomM so you can download games into it.`;
+    $('#dBiosNote').hidden = !pickBios;
+    $('#dBiosNote').textContent = !pickBios ? '' : p.bios === 'required'
+      ? `${p.label} needs BIOS files to play. Next you'll pick a BIOS download from the available torrents.`
+      : `${p.label} works best with BIOS files. Next you'll pick a BIOS download from the available torrents (you can close it to skip).`;
+    $('#dWarn').textContent = p.browser ? '' : `RomM can store ${p.label} games but can't play them in the browser.`;
+    $('#dOk').textContent = pickBios ? (forGame ? 'Add, download & pick BIOS' : 'Add & pick BIOS')
+                                     : (forGame ? 'Add platform & download' : 'Add platform');
+    const done = v => { $('#dlg').close(); resolve(v); };
+    $('#dOk').onclick = async () => {
+      $('#dOk').disabled = true;
+      try { await api('api/platforms', {platform: p.slug}); toast(`${p.label} added to RomM`, 'good'); done({wantBios: pickBios}); }
+      catch (e) { toast('Could not add platform: ' + e.message, 'bad'); done(null); }
+      finally { $('#dOk').disabled = false; }
+    };
+    $('#dCancel').onclick = () => done(null);
+    $('#dlg').oncancel = ev => { ev.preventDefault(); done(null); };
+    $('#dlg').showModal();
+  });
+}
+
+/* ---------------- platforms ---------------- */
+async function loadPlatforms() {
+  try { PLAT = await api('api/platforms'); } catch (e) { $('#mine').innerHTML = `<div class="msg err">Could not load platforms: ${esc(e.message)}</div>`; return; }
+  const mine = PLAT.filter(p => p.exists), avail = PLAT.filter(p => !p.exists);
+  $('#mine').innerHTML = mine.length ? `<div class="cards">${mine.map(p => `
+    <div class="card">
+      <div class="h"><b>${esc(p.label)}</b><span class="sub">${p.games} game${p.games === 1 ? '' : 's'}</span></div>
+      <div class="tags">${p.bios ? biosNeed(p) : '<span class="pill">No BIOS needed</span>'}${p.browser ? '' : '<span class="pill">download only</span>'}</div>
+      ${p.bios_files ? `<div class="files">${p.bios_names.map(esc).join(', ')}</div>` : ''}
+      ${p.bios ? `<div><button class="sm ${p.bios_files ? 'ghost' : ''}" data-bios="${p.slug}">${p.bios_files ? 'Get more BIOS' : 'Get BIOS'}</button></div>` : ''}
+    </div>`).join('')}</div>`
+    : `<div class="empty">No platforms yet. Add one below, or just grab a game and you'll be asked to add its platform.</div>`;
+  $('#avail').innerHTML = avail.map(p => `
+    <div class="card add" data-add="${p.slug}">
+      <div class="h"><b>${esc(p.label)}</b><span class="sub">+ Add</span></div>
+      <div class="tags">${p.bios ? `<span class="pill ${p.bios === 'required' ? 'need' : 'soft'}">BIOS ${esc(p.bios)}</span>` : '<span class="pill">No BIOS needed</span>'}${p.browser ? '' : '<span class="pill">download only</span>'}</div>
+    </div>`).join('');
+  // refresh platform dropdowns in game results, keeping choices
+  document.querySelectorAll('#res select').forEach(s => { const v = s.value; s.innerHTML = platOptions(v); });
+  if ($('#tab-library').classList.contains('on')) renderLib();
+}
+$('#avail').onclick = async e => {
+  const c = e.target.closest('[data-add]'); if (!c) return;
+  const ok = await addPlatformDialog(P(c.dataset.add), false);
+  if (!ok) return;
+  await loadPlatforms();
+  if (ok.wantBios) openBios(c.dataset.add);
+};
+$('#mine').onclick = e => { const b = e.target.closest('[data-bios]'); if (b) openBios(b.dataset.bios); };
+
+/* ---------------- BIOS finder ---------------- */
+let biosSlug = null;
+function openBios(slug) {
+  const p = P(slug); biosSlug = slug;
+  show('platforms');
+  $('#biosPanel').hidden = false;
+  $('#biosTitle').textContent = `Find BIOS for ${p.label}`;
+  $('#biosHelp').innerHTML = `Look for small results named like <i>"${esc(p.label)} BIOS"</i>. Big emulator bundles and game packs are usually the wrong thing. Grabbed files go into RomM's ${esc(p.label)} firmware folder.`;
+  $('#bq').value = p.bios_query || p.label + ' bios';
+  $('#biosPanel').scrollIntoView({behavior: 'smooth', block: 'start'});
+  biosSearch();
+}
+$('#biosClose').onclick = () => { $('#biosPanel').hidden = true; biosSlug = null; };
+$('#bf').onsubmit = e => { e.preventDefault(); biosSearch(); };
+async function biosSearch() {
+  const q = $('#bq').value.trim(); if (!q) return;
+  $('#bres').innerHTML = '<div class="msg">Searching…</div>';
+  try {
+    const d = await api('api/search?kind=bios&q=' + encodeURIComponent(q));
+    $('#bres').innerHTML = !d.length ? '<div class="msg">No results. Try different words, e.g. add "pack" or the console\'s model number.</div>'
+      : resultTable(d, x => `<button class="sm" data-id="${x.id}">Grab BIOS</button>`);
+  } catch (e) { $('#bres').innerHTML = `<div class="msg err">Search failed: ${esc(e.message)}</div>`; }
+}
+$('#bres').onclick = async e => {
+  const b = e.target.closest('button[data-id]'); if (!b || !biosSlug) return;
+  b.disabled = true; b.textContent = '…';
+  try {
+    await api('api/grab', {id: b.dataset.id, platform: biosSlug, kind: 'bios'});
+    b.textContent = 'Added ✓'; toast(`Downloading ${P(biosSlug).label} BIOS. Track it in Library.`, 'good');
+    refreshActivity();
+  } catch (err) { b.disabled = false; b.textContent = 'Grab BIOS'; toast('Grab failed: ' + err.message, 'bad'); }
+};
+
+/* ---------------- game search ---------------- */
+function platOptions(sel) {
+  const mine = PLAT.filter(p => p.exists), other = PLAT.filter(p => !p.exists);
+  const o = p => `<option value="${p.slug}"${p.slug === sel ? ' selected' : ''}>${esc(p.label)}</option>`;
+  return `<option value="">Choose platform…</option>` +
+    (mine.length ? `<optgroup label="Set up in RomM">${mine.map(o).join('')}</optgroup>` : '') +
+    `<optgroup label="Not set up yet (you'll be asked to add it)">${other.map(o).join('')}</optgroup>`;
+}
+function resultTable(d, action) {
+  return `<table><thead><tr><th>Title</th><th>Size</th><th>Seeds</th><th>Source</th><th></th></tr></thead><tbody>${
+    d.map(x => `<tr data-id="${x.id}"><td class="t">${x.info ? `<a href="${esc(x.info)}" target="_blank" rel="noopener" style="color:inherit">${esc(x.title)}</a>` : esc(x.title)}</td>
+    <td class="n">${size(x.size)}</td><td class="n">${x.seeders}</td><td class="n">${esc(x.indexer)}</td>
+    <td class="a">${action(x)}</td></tr>`).join('')}</tbody></table>`;
+}
+$('#f').onsubmit = async e => {
+  e.preventDefault();
+  const q = $('#q').value.trim(); if (!q) return;
+  $('#go').disabled = true; $('#res').innerHTML = '<div class="msg">Searching…</div>';
+  try {
+    const d = await api('api/search?q=' + encodeURIComponent(q));
+    $('#res').innerHTML = !d.length ? '<div class="msg">No results. Try fewer words.</div>'
+      : resultTable(d, x => `<select>${platOptions(x.platform)}</select> <button class="sm">Grab</button>`);
+  } catch (err) { $('#res').innerHTML = `<div class="msg err">Search failed: ${esc(err.message)}</div>`; }
+  finally { $('#go').disabled = false; }
+};
+$('#res').onclick = async e => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  const tr = btn.closest('tr'), sel = tr.querySelector('select'), slug = sel.value;
+  if (!slug) { sel.focus(); sel.style.borderColor = 'var(--bad)'; toast('Choose a platform for this game first.', 'bad'); return; }
+  const name = tr.querySelector('td.t').textContent.trim();
+  const send = () => api('api/grab', {id: tr.dataset.id, platform: slug, kind: 'rom'});
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    let ok = null;
+    if (!P(slug).exists) {
+      ok = await addPlatformDialog(P(slug), true);
+      if (!ok) { btn.disabled = false; btn.textContent = 'Grab'; return; }
+    }
+    try { await send(); }
+    catch (err) {
+      if (err.status !== 409) throw err;           // page was stale: ask now
+      ok = await addPlatformDialog(err.data.platform || P(slug), true);
+      if (!ok) { btn.disabled = false; btn.textContent = 'Grab'; return; }
+      await send();
+    }
+    btn.textContent = 'Added ✓';
+    toast(`Downloading ${name} → ${P(slug).label}. Track it in Library.`, 'good');
+    await loadPlatforms(); refreshActivity();
+    if (ok && ok.wantBios) openBios(slug);
+  } catch (err) { btn.disabled = false; btn.textContent = 'Grab'; toast('Grab failed: ' + err.message, 'bad'); }
+};
+
+/* ---------------- library ---------------- */
+const STATE_TEXT = {downloading: 'Downloading', waiting: 'Waiting for virus scan', imported: 'In RomM', blocked: 'Blocked'};
+async function refreshActivity() {
+  let q = [];
+  try { q = await api('api/queue'); } catch { $('#activity').innerHTML = '<div class="msg err">Could not reach qBittorrent.</div>'; return; }
+  const day = Date.now()/1000 - 86400;
+  const act = q.filter(x => x.state !== 'imported' || x.added > day);
+  const busy = q.filter(x => x.state === 'downloading' || x.state === 'waiting').length;
+  $('#actCount').hidden = !busy; $('#actCount').textContent = busy;
+  $('#activity').innerHTML = !act.length ? '<div class="empty">Nothing downloading.</div>' :
+    `<table><thead><tr><th>Name</th><th>Platform</th><th>Size</th><th>Added</th><th></th></tr></thead><tbody>${act.map(x => `
+    <tr><td class="t">${esc(x.name)}${x.state === 'downloading' ? `<div class="bar"><i style="width:${x.progress*100}%"></i></div>` : ''}
+      ${x.state === 'blocked' && x.detail ? `<div class="help err">${esc(x.detail)}</div>` : ''}</td>
+    <td class="n">${esc(P(x.platform).label)}${x.kind === 'bios' ? ' · BIOS' : ''}</td><td class="n">${size(x.size)}</td>
+    <td class="n">${x.added ? ago(x.added) : ''}</td>
+    <td class="a"><span class="pill ${x.state}" title="${esc(x.detail)}">${x.state === 'downloading' ? Math.floor(x.progress*100) + '%' : STATE_TEXT[x.state] || esc(x.state)}</span></td></tr>`).join('')}</tbody></table>`;
+}
+let LIB = [], CFG = {romm: '', linked: false}, libPlat = '';
+api('api/config').then(c => { CFG = c; if (c.romm) $('#rommLink').href = c.romm; else $('#rommLink').hidden = true; }).catch(() => {});
+async function loadLibrary() {
+  refreshActivity();
+  try { LIB = await api('api/library'); } catch (e) { $('#lib').innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
+  renderLib();
+}
+const rommRom = (g, play) => `${CFG.romm}/rom/${g.romm_id}${play ? '/ejs' : ''}`;
+const rommPlat = p => p.romm_id ? `${CFG.romm}/platform/${p.romm_id}` : CFG.romm;
+function gameAction(g) {
+  const p = P(g.platform);
+  if (!g.romm_id) {
+    if (CFG.linked && Date.now()/1000 - g.added < 900) return '<span class="pill soft" title="RomM picks new games up within a few minutes">RomM is scanning…</span>';
+    return `<a class="btn ghost" href="${rommPlat(p)}" target="_blank" rel="noopener">Open in RomM</a>`;
+  }
+  return p.browser
+    ? `<a class="btn" href="${rommRom(g, true)}" target="_blank" rel="noopener">▶ Play in RomM</a>`
+    : `<a class="btn" href="${rommRom(g, false)}" target="_blank" rel="noopener">Download from RomM</a>`;
+}
+function platHead(p) {
+  if (!p) return '';
+  const open = `<a class="btn ghost" href="${rommPlat(p)}" target="_blank" rel="noopener">Open ${esc(p.label)} in RomM</a>`;
+  if (p.browser) {
+    const bios = p.bios && !p.bios_files && p.bios !== 'optional'
+      ? ` <span class="pill ${p.bios === 'required' ? 'need' : 'soft'}">BIOS ${esc(p.bios)}: add it in Platforms &amp; BIOS</span>` : '';
+    return `<div class="phead"><div class="txt"><b>Plays right in the browser.</b> Pick a game and hit Play. Nothing to install.${bios}</div>${open}</div>`;
+  }
+  const emus = (p.emulators || []).map(e => `<a class="btn" href="${esc(e.url)}" target="_blank" rel="noopener">Get ${esc(e.name)} ↗</a>`).join(' ');
+  const bios = p.bios ? ` It also needs the ${esc(p.label)} BIOS: download it from the platform page in RomM and load it into the emulator.` : '';
+  return `<div class="phead"><div class="txt"><b>Can't be played in the browser.</b> Download the game from RomM, then play it in ${
+    p.emulators && p.emulators.length ? p.emulators.map(e => esc(e.name)).join(' or ') + ' on your own computer or device' : 'an emulator on your own device'}.${bios}</div>
+    <div class="row">${emus}${open}</div></div>`;
+}
+function renderLib() {
+  const counts = {}; LIB.forEach(g => counts[g.platform] = (counts[g.platform] || 0) + 1);
+  const tabs = PLAT.filter(p => p.exists || counts[p.slug]);
+  if (libPlat && !tabs.some(p => p.slug === libPlat)) libPlat = '';
+  $('#stats').innerHTML = `<div class="stat"><b>${LIB.length}</b><span>games</span></div>
+    <div class="stat"><b>${Object.keys(counts).length}</b><span>platforms with games</span></div>
+    <div class="stat"><b>${size(LIB.reduce((a, g) => a + g.size, 0))}</b><span>on disk</span></div>`;
+  $('#ptabs').innerHTML = !tabs.length ? '' : `<button data-p="" class="${libPlat ? '' : 'on'}">All<span>${LIB.length}</span></button>` +
+    tabs.map(p => `<button data-p="${p.slug}" class="${libPlat === p.slug ? 'on' : ''}">${esc(p.label)}<span>${counts[p.slug] || 0}</span></button>`).join('');
+  $('#phead').innerHTML = libPlat ? platHead(P(libPlat)) : '';
+  const f = $('#lq').value.trim().toLowerCase();
+  const rows = LIB.filter(g => (!libPlat || g.platform === libPlat) && (!f || g.name.toLowerCase().includes(f)));
+  $('#lib').innerHTML = !LIB.length && !libPlat ? '<div class="empty">No games yet. Find some in <a href="#download">Download games</a>.</div>'
+    : !rows.length ? `<div class="empty">${f ? 'No games match.' : `No ${esc(P(libPlat).label)} games yet. Find some in <a href="#download">Download games</a>.`}</div>`
+    : `<table><thead><tr><th>Game</th>${libPlat ? '' : '<th>Platform</th>'}<th>Size</th><th>Added</th><th></th></tr></thead><tbody>${rows.map(g => `
+      <tr><td class="t">${esc(g.name)}${g.folder ? ` <span class="pill">${g.files} files</span>` : ''}</td>
+      ${libPlat ? '' : `<td class="n">${esc(P(g.platform).label)}</td>`}<td class="n">${size(g.size)}</td><td class="n">${ago(g.added)}</td>
+      <td class="a">${gameAction(g)}</td></tr>`).join('')}</tbody></table>`;
+}
+$('#ptabs').onclick = e => { const b = e.target.closest('button'); if (b) { libPlat = b.dataset.p; renderLib(); } };
+$('#lq').oninput = renderLib;
+
+/* ---------------- start ---------------- */
+loadPlatforms().then(() => show(location.hash.slice(1)));
+refreshActivity();
+setInterval(() => { refreshActivity(); if ($('#tab-library').classList.contains('on')) api('api/library').then(d => { LIB = d; renderLib(); }).catch(() => {}); }, 10000);
+setInterval(loadPlatforms, 30000);
+</script>
+</body>
+</html>

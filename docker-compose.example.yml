@@ -1,0 +1,19 @@
+services:
+  romseek:
+    image: python:3.12-alpine
+    container_name: romseek
+    restart: unless-stopped
+    user: "1000:1000"
+    command: ["python3", "-u", "/app/romseek.py"]
+    env_file: ./romseek/romseek.env
+    volumes:
+      - ./romseek/romseek.py:/app/romseek.py:ro
+      - ./romseek/index.html:/app/index.html:ro
+      - ./romseek/state:/state
+      # Mount the same parent folder qBittorrent uses, at the same path, so
+      # download paths match and hardlinks into the RomM library work.
+      - /srv:/data
+      # Optional virus-scan gate (see SCAN_STATE in .env.example):
+      # - /var/lib/clamav-scan:/scan:ro
+    # No ports: put it behind your authenticating reverse proxy on this network.
+    networks: [default]
