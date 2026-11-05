@@ -671,6 +671,17 @@ def upload_firmware(slug, filename, length, stream, offset=0, total=None, upload
     return {"platform": slug, "file": name, "size": total, "done": done}
 
 
+def delete_firmware(slug, filename):
+    if slug not in SLUGS:
+        raise ValueError("unknown platform")
+    name = os.path.basename(filename)
+    if not name or name.startswith(".") or name not in bios_files(slug):
+        raise ValueError("no such firmware file")
+    os.remove(os.path.join(FIRMWARE, slug, name))
+    log("firmware removed", slug, name)
+    return platform_info(slug)
+
+
 # ---------------------------------------------------------------- web
 PAGE = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"), encoding="utf-8").read()
 
@@ -738,6 +749,10 @@ class H(BaseHTTPRequestHandler):
                      str(body.get("kind") or "rom"))
                 log("  by", self.headers.get("Remote-User", "?"))
                 return self.send(200, {"ok": True})
+            if self.path == "/api/firmware/delete":
+                info = delete_firmware(str(body.get("platform", "")), str(body.get("file", "")))
+                log("  by", self.headers.get("Remote-User", "?"))
+                return self.send(200, info)
             if self.path == "/api/platforms":
                 info = add_platform(str(body.get("platform", "")))
                 log("  by", self.headers.get("Remote-User", "?"))
