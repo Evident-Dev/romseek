@@ -403,6 +403,31 @@ $('#res').onclick = async e => {
 
 /* ---------------- library ---------------- */
 const STATE_TEXT = {downloading: 'Downloading', waiting: 'Waiting for virus scan', imported: 'In RomM', blocked: 'Blocked'};
+// qBittorrent's own state, in plain words.
+const QSTATE = {
+  queuedDL: ['Queued', 'soft', 'Waiting for a free download slot'],
+  metaDL: ['Getting torrent info', 'soft', 'Asking peers for the file list'],
+  forcedMetaDL: ['Getting torrent info', 'soft', 'Asking peers for the file list'],
+  stalledDL: ['Stalled', 'need', 'No one is sending data right now'],
+  downloading: ['Downloading', 'good', ''], forcedDL: ['Downloading', 'good', 'Forced start'],
+  checkingDL: ['Checking files', 'soft', ''], checkingResumeData: ['Checking files', 'soft', ''],
+  pausedDL: ['Paused', '', ''], stoppedDL: ['Paused', '', ''], moving: ['Moving', 'soft', ''],
+  error: ['Error', 'need', 'qBittorrent reported an error'], missingFiles: ['Files missing', 'need', ''],
+};
+const speed = b => b > 1e6 ? (b/1e6).toFixed(1) + ' MB/s' : Math.round(b/1e3) + ' KB/s';
+const eta = s => !s || s >= 8640000 ? '' : s < 60 ? s + 's left' : s < 3600 ? Math.round(s/60) + 'm left' : s < 86400 ? (s/3600).toFixed(1) + 'h left' : Math.round(s/86400) + 'd left';
+function statusCell(x) {
+  if (x.state !== 'downloading') return `<span class="pill ${x.state}" title="${esc(x.detail)}">${STATE_TEXT[x.state] || esc(x.state)}</span>`;
+  const [txt, cls, tip] = QSTATE[x.qstate] || [x.qstate || 'Downloading', 'soft', ''];
+  const live = x.qstate === 'downloading' || x.qstate === 'forcedDL';
+  return `<span class="pill ${cls}" title="${esc(tip)}">${esc(txt)}</span>
+    <div class="help" style="margin-top:4px">${Math.floor(x.progress*100)}%${live && x.dlspeed ? ' · ' + speed(x.dlspeed) : ''}${live && eta(x.eta) ? ' · ' + eta(x.eta) : ''}</div>`;
+}
+function peersCell(x) {
+  if (x.state !== 'downloading') return '';
+  // connected (in the swarm) — e.g. "3 (41) seeds · 1 (6) peers"
+  return `<span title="Connected (in the swarm)">${x.seeds} <span style="opacity:.6">(${x.seeds_total})</span> seeds · ${x.peers} <span style="opacity:.6">(${x.peers_total})</span> peers</span>`;
+}
 async function refreshActivity() {
   let q = [];
   try { q = await api('api/queue'); } catch { $('#activity').innerHTML = '<div class="msg err">Could not reach qBittorrent.</div>'; return; }
@@ -411,12 +436,14 @@ async function refreshActivity() {
   const busy = q.filter(x => x.state === 'downloading' || x.state === 'waiting').length;
   $('#actCount').hidden = !busy; $('#actCount').textContent = busy;
   $('#activity').innerHTML = !act.length ? '<div class="empty">Nothing downloading.</div>' :
-    `<table><thead><tr><th>Name</th><th>Platform</th><th>Size</th><th>Added</th><th></th></tr></thead><tbody>${act.map(x => `
+    `<table><thead><tr><th>Name</th><th>Platform</th><th>Size</th><th>Peers</th><th>Added</th><th style="text-align:right">Status</th></tr></thead><tbody>${act.map(x => `
     <tr><td class="t">${esc(x.name)}${x.state === 'downloading' ? `<div class="bar"><i style="width:${x.progress*100}%"></i></div>` : ''}
       ${x.state === 'blocked' && x.detail ? `<div class="help err">${esc(x.detail)}</div>` : ''}</td>
     <td class="n">${esc(P(x.platform).label)}${x.kind === 'bios' ? ' · BIOS' : ''}</td><td class="n">${size(x.size)}</td>
+    <td class="n">${peersCell(x)}</td>
     <td class="n">${x.added ? ago(x.added) : ''}</td>
-    <td class="a"><span class="pill ${x.state}" title="${esc(x.detail)}">${x.state === 'downloading' ? Math.floor(x.progress*100) + '%' : STATE_TEXT[x.state] || esc(x.state)}</span></td></tr>`).join('')}</tbody></table>`;
+    <td class="a">${statusCell(x)}</td></tr>`).join('')}</tbody></table>
+    <p class="help">Peers: connected now, with how many exist in the swarm in brackets.</p>`;
 }
 let LIB = [], CFG = {romm: '', linked: false}, libPlat = '';
 api('api/config').then(c => { CFG = c; if (c.romm) $('#rommLink').href = c.romm; else $('#rommLink').hidden = true; }).catch(() => {});
