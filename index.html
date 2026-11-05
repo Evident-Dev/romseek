@@ -128,7 +128,7 @@ dialog .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
 
 <!-- ============ LIBRARY ============ -->
 <section class="tab" id="tab-library">
-  <h2>Activity</h2>
+  <h2>Pending downloads</h2>
   <div id="activity"></div>
 
   <h2>In RomM</h2>
@@ -431,8 +431,8 @@ function peersCell(x) {
 async function refreshActivity() {
   let q = [];
   try { q = await api('api/queue'); } catch { $('#activity').innerHTML = '<div class="msg err">Could not reach qBittorrent.</div>'; return; }
-  const day = Date.now()/1000 - 86400;
-  const act = q.filter(x => x.state !== 'imported' || x.added > day);
+  // Only what's still on its way: downloading or waiting for the virus scan.
+  const act = q.filter(x => x.state === 'downloading' || x.state === 'waiting');
   const busy = q.filter(x => x.state === 'downloading' || x.state === 'waiting').length;
   $('#actCount').hidden = !busy; $('#actCount').textContent = busy;
   $('#activity').innerHTML = !act.length ? '<div class="empty">Nothing downloading.</div>' :
