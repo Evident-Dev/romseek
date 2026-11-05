@@ -241,6 +241,26 @@ tbody tr:hover td{background:rgba(26,31,40,.55)}
 /* dialogs + toasts */
 dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px 60px -20px rgba(0,0,0,.8)}
 .toast{background:var(--panel);border-color:var(--line-strong);border-left-width:3px}
+/* ===== layout breakpoints ===== */
+.crumbs{position:sticky;top:var(--hdr,92px);z-index:5;display:flex;align-items:center;gap:12px;margin:0 -16px 12px;padding:10px 16px;background:rgba(10,12,16,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.crumbs .crumb{font-family:var(--display,inherit);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crumbs .crumb i{font-style:normal;opacity:.5;margin:0 4px}.crumbs .crumb b{color:var(--text)}
+#libBack{padding:8px 14px;font-family:var(--display,inherit);font-size:12px;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+.toolbar{align-items:center}.toolbar .row{flex-wrap:nowrap}
+.toolbar .row input[type=search]{flex:0 1 240px;width:240px}
+.game .cover{background:#0a0c10}
+.game .cover .blur{position:absolute;inset:-12px;width:calc(100% + 24px);height:calc(100% + 24px);object-fit:cover;filter:blur(14px) brightness(.45);transform:scale(1.05)}
+.game .cover img.art{position:relative;object-fit:contain}
+/* tablet */
+@media (max-width:900px){.games{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}.systems{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}.hero h3{font-size:22px}.hero .logo{width:96px;height:64px}}
+/* phone */
+@media (max-width:600px){main{padding:12px}.crumbs{margin:0 -12px 10px;padding:8px 12px}.crumbs .crumb{display:none}
+  .toolbar{flex-direction:column;align-items:stretch}.toolbar .row{flex-wrap:wrap}.toolbar .row input[type=search]{flex:1 1 auto;width:auto}}
+@media (max-width:380px){.games{grid-template-columns:1fr 1fr;gap:8px}.game .info{padding:8px}.game .act{padding:6px 10px;font-size:12px}.systems{grid-template-columns:1fr}}
+/* laptop / desktop / wide */
+@media (min-width:1440px){.top,nav,main{max-width:1360px}.games{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:18px}.systems{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}}
+@media (min-width:1800px){.top,nav,main{max-width:1640px}.games{grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:20px}.systems{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px}.hero h3{font-size:30px}}
+@media (min-width:2400px){.top,nav,main{max-width:2100px}.games{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}}
 </style>
 </head>
 <body>
@@ -300,7 +320,7 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
 
   <!-- one system -->
   <div id="libPlat" hidden>
-    <button class="back" id="libBack">← All systems</button>
+    <div class="crumbs" id="crumbs"><button class="ghost sm" id="libBack" title="Back to all systems (Esc)">← All systems</button><span class="crumb">Library <i>/</i> <b id="crumbName"></b></span></div>
     <div class="hero" id="hero"></div>
     <div class="setup" id="setup"></div>
     <div class="toolbar">
@@ -364,12 +384,15 @@ const biosNeed = p => !p.bios ? '' : p.bios_files ? `<span class="pill good">BIO
   : `<span class="pill ${p.bios === 'required' ? 'need' : 'soft'}">BIOS ${esc(p.bios)}</span>`;
 
 /* ---------------- tabs ---------------- */
-function show(tab) {
-  if (!['download','platforms','library'].includes(tab)) tab = 'download';
+function show(hash) {
+  let [tab, sub = ''] = (hash || '').split('/');
+  if (!['download','platforms','library'].includes(tab)) tab = 'download', sub = '';
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   document.querySelectorAll('section.tab').forEach(s => s.classList.toggle('on', s.id === 'tab-' + tab));
-  if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
-  if (tab === 'library') loadLibrary();
+  const want = tab + (tab === 'library' && sub ? '/' + sub : '');
+  if (location.hash.slice(1) !== want) history.replaceState(null, '', '#' + want);
+  if (tab === 'library' && sub && PLAT.length && !PLAT.some(p => p.slug === sub)) sub = '';
+  if (tab === 'library') { if (!sub) cameFromHome = false; const prev = libPlat; libPlat = sub; if (prev !== sub) { $('#lq').value = ''; window.scrollTo({top: 0}); } LIB.length ? renderLib() : 0; loadLibrary(); }
   if (tab === 'download') $('#q').focus();
 }
 document.querySelector('nav').onclick = e => { const b = e.target.closest('button'); if (b) show(b.dataset.tab); };
@@ -762,6 +785,7 @@ function renderHome() {
 /* one system: hero, setup (BIOS + emulator), game grid */
 function renderPlatform(p) {
   const games = LIB.filter(g => g.platform === p.slug);
+  $('#crumbName').textContent = p.label;
   $('#hero').innerHTML = `<div class="logo">${logoImg(p)}</div>
     <div><h3>${esc(p.label)}</h3>
       <div class="meta"><span>${games.length} game${games.length === 1 ? '' : 's'}</span>
@@ -816,7 +840,7 @@ function gameTile(g, showPlat) {
     ? `<a class="act play" href="${rommRom(g, true)}" target="_blank" rel="noopener">▶ Play</a>`
     : `<a class="act dl" href="${rommDl(g)}" title="Download ${esc(g.fs_name || g.name)}">⬇ Download</a>`;
   const cover = g.cover
-    ? `<img src="${esc(g.cover)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',innerHTML:'<b>${esc(t).replace(/'/g, '&#39;')}</b>'}))">`
+    ? `<img class="blur" src="${esc(g.cover)}" alt="" loading="lazy" aria-hidden="true"><img class="art" src="${esc(g.cover)}" alt="" loading="lazy" onerror="this.previousElementSibling.remove();this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',innerHTML:'<b>${esc(t).replace(/'/g, '&#39;')}</b>'}))">`
     : `<div class="ph"><img src="${logo(p.slug)}" alt="" onerror="this.remove()"><b>${esc(t)}</b></div>`;
   return `<div class="game" title="${esc(g.summary || t)}">
     <div class="cover">${cover}${showPlat ? `<span class="badge">${esc(p.label)}</span>` : ''}</div>
@@ -825,8 +849,14 @@ function gameTile(g, showPlat) {
   </div>`;
 }
 $('#systems').onclick = e => { const b = e.target.closest('[data-plat]'); if (b) openSystem(b.dataset.plat); };
-function openSystem(slug) { libPlat = slug; $('#lq').value = ''; renderLib(); window.scrollTo({top: 0, behavior: 'smooth'}); }
-$('#libBack').onclick = () => { libPlat = ''; renderLib(); };
+// Systems are real URLs (#library/<slug>), so the browser Back button and links work too.
+let cameFromHome = false;
+function openSystem(slug) { cameFromHome = true; location.hash = 'library/' + slug; }
+function backToSystems() { if (cameFromHome) history.back(); else location.hash = 'library'; }
+$('#libBack').onclick = backToSystems;
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && libPlat && !document.querySelector('dialog[open]') && $('#tab-library').classList.contains('on')) backToSystems(); });
+const setHdr = () => document.documentElement.style.setProperty('--hdr', document.querySelector('header').offsetHeight + 'px');
+addEventListener('resize', setHdr); setHdr();
 $('#setup').onclick = e => { const b = e.target.closest('[data-bios]'); if (b) openBios(b.dataset.bios); };
 $('#lq').oninput = renderLib; $('#lsort').onchange = renderLib;
 
