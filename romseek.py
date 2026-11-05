@@ -52,7 +52,7 @@ PLATFORMS = [
     ("gba", "Game Boy Advance", r"\bgba\b|game ?boy advance|\.gba\b"),
     ("nds", "Nintendo DS", r"\bnds\b|nintendo ds\b|\bds\b|\.nds\b"),
     ("3ds", "Nintendo 3DS", r"\b3ds\b|\.cia\b"),
-    ("ngc", "GameCube", r"gamecube|\bngc\b|\bgc\b"),
+    ("ngc", "GameCube", r"gamecube|\bngc\b|\bgc\b|\bgcm\b|\bgcz\b|(moon|stinky|purple)cube"),
     ("wii", "Wii", r"\bwii\b(?! ?u)|\bwbfs\b"),
     ("wiiu", "Wii U", r"wii ?u\b"),
     ("switch", "Switch", r"\bswitch\b|\bnsp\b|\bxci\b"),
@@ -281,7 +281,8 @@ def ensure_category():
 
 # ---------------------------------------------------------------- search / grab
 def guess_platform(title):
-    t = title.lower()
+    # "_" and "." act as spaces in release names (Mario_Party_7_USA_NGC-STINKYCUBE)
+    t = re.sub(r"[_.]+", " ", title.lower()) + " " + title.lower()
     for slug, _, rx in PLATFORMS:
         if re.search(rx, t):
             return slug
@@ -462,10 +463,59 @@ def search(query, any_category=False):
                 "age": x.get("age"), "info": x.get("infoUrl") or "",
                 "platform": plat,
             })
+    suggest_from_siblings(out)
     # ROM-specific indexer first, then anything we could place on a platform
     # (generic-"Console" hits are usually miscategorised PC releases), then seeds.
     out.sort(key=lambda r: (r["indexer"] != "BlueRoms", not r["platform"], -r["seeders"]))
     return out
+
+
+# Words that describe a release, not the game, stripped before comparing titles.
+_RELEASE_WORDS = set("""usa us u eur europe pal ntsc ntscu ntscj jap japan jpn multi multi2 multi3
+multi4 multi5 multi6 en fr de es it nl eng english rare original rars rar zip 7z iso rom roms
+nkit rvz wbfs gcm gcz ciso cso chd nsp xci repack proper fixed working full game
+nintendo sony sega microsoft gamecube gc ngc wii wiiu switch nds ds 3ds gba gbc gb n64 snes
+nes psx ps1 ps2 ps3 psp vita xbox dreamcast genesis megadrive saturn and the of for or""".split())
+
+
+def title_key(title):
+    """Normalized game title: drop [groups]/(tags), punctuation, release words."""
+    t = re.sub(r"\[[^\]]*\]|\([^)]*\)|\{[^}]*\}", " ", title.lower())
+    t = re.sub(r"\bv?\d+(\.\d+)+\b", " ", t)          # version numbers
+    words = [w for w in re.split(r"[^a-z0-9]+", t) if w and w not in _RELEASE_WORDS]
+    return " ".join(words)
+
+
+def suggest_from_siblings(results):
+    """For results with no detected platform, suggest the platform most other
+    results with the same game title were detected as (same search, so e.g.
+    'Super Mario Sunshine NTSC' follows 'Super Mario Sunshine - Nintendo GameCube')."""
+    votes = {}
+    for r in results:
+        if r["platform"]:
+            k = title_key(r["title"])
+            if k:
+                votes.setdefault(k, {}).setdefault(r["platform"], 0)
+                votes[k][r["platform"]] += 1 + (r["indexer"] == "BlueRoms")
+    for r in results:
+        r["suggested"] = ""
+        if r["platform"]:
+            continue
+        k = title_key(r["title"])
+        tally = votes.get(k)
+        if not tally:   # fall back to titles whose words contain / are contained in this one
+            tally, kw = {}, set(k.split())
+            for vk, v in votes.items():
+                vw = set(vk.split())
+                nums = lambda ws: {w for w in ws if w.isdigit()}
+                # sequels differ by number: "mario party 5" must not follow "mario party"
+                if k and nums(kw) == nums(vw) and (kw <= vw or vw <= kw) and min(len(kw), len(vw)) >= 2:
+                    for pl, n in v.items():
+                        tally[pl] = tally.get(pl, 0) + n
+        if tally:
+            best = max(tally.items(), key=lambda kv: kv[1])
+            if best[1] > sum(tally.values()) / 2:    # clear majority only
+                r["suggested"] = best[0]
 
 
 def grab(rid, slug, kind="rom"):

@@ -41,7 +41,7 @@ th{color:var(--muted);font-weight:500;font-size:13px}
 td.t{word-break:break-word}
 td.n{white-space:nowrap;color:var(--muted);font-variant-numeric:tabular-nums}
 td.a{white-space:nowrap;text-align:right}
-td.a select{padding:6px 8px;max-width:190px}
+td.a select,td select.pick{padding:5px 8px;max-width:190px;font-size:12px}
 .pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;border:1px solid var(--line);white-space:nowrap;color:var(--muted)}
 .good,.imported{color:var(--ok);border-color:var(--ok)}
 .need,.blocked{color:var(--bad);border-color:var(--bad)}
@@ -578,7 +578,7 @@ function resultTable(d, action) {
   return `<table><thead><tr><th>Title</th><th>Size</th><th>Seeds</th><th>Source</th><th>Platform</th><th></th></tr></thead><tbody>${
     d.map(x => `<tr data-id="${x.id}" data-plat="${x.platform || ''}"><td class="t">${x.info ? `<a href="${esc(x.info)}" target="_blank" rel="noopener" style="color:inherit">${esc(x.title)}</a>` : esc(x.title)}</td>
     <td class="n">${size(x.size)}</td><td class="n">${x.seeders}</td><td class="n">${esc(x.indexer)}</td>
-    <td class="n">${platPill(x.platform)}</td>
+    <td class="n">${x.platform ? platPill(x.platform) : unknownPicker(x)}</td>
     <td class="a">${action(x)}</td></tr>`).join('')}</tbody></table>`;
 }
 function platPill(slug) {
@@ -586,13 +586,19 @@ function platPill(slug) {
   const p = P(slug);
   return `<span class="pill ${p.exists ? 'good' : ''}" title="${p.exists ? 'Set up in RomM' : 'Not set up in RomM yet: you\'ll be asked to add it'}">${esc(p.label)}</span>`;
 }
+function unknownPicker(x) {
+  // Unknown platform: let the user choose; pre-select the suggestion if any.
+  const o = PLAT.map(p => `<option value="${p.slug}"${p.slug === x.suggested ? ' selected' : ''}>${esc(p.label)}${p.slug === x.suggested ? ' (suggested)' : ''}</option>`).join('');
+  return `<select class="pick" title="RomSeek couldn't tell which system this is for${x.suggested ? '; the suggestion comes from matching results' : ''}">
+    <option value="">Choose platform…</option>${o}</select>`;
+}
 function renderResults() {
   const pf = $('#rplat') ? $('#rplat').value : '';
   const rows = RES.filter(x => !pf || (pf === '?' ? !x.platform : x.platform === pf));
   $('#rtable').innerHTML = !rows.length ? '<div class="msg">No results for that platform.</div>'
     : resultTable(rows, x => x.platform
         ? `<button class="sm">Grab</button>`
-        : `<button class="sm" disabled title="Unknown platform">Grab</button>`);
+        : `<button class="sm"${x.suggested ? '' : ' disabled'}>Grab</button>`);
 }
 $('#f').onsubmit = async e => {
   e.preventDefault();
@@ -610,14 +616,15 @@ $('#f').onsubmit = async e => {
         <span class="help" style="margin:0">${RES.length} result${RES.length === 1 ? '' : 's'}</span></div>
       <div id="rtable"></div>`;
     $('#rplat').onchange = renderResults;
+    $('#res').onchange = e => { const sel = e.target.closest('select.pick'); if (sel) sel.closest('tr').querySelector('button').disabled = !sel.value; };
     renderResults();
   } catch (err) { $('#res').innerHTML = `<div class="msg err">Search failed: ${esc(err.message)}</div>`; }
   finally { $('#go').disabled = false; }
 };
 $('#res').onclick = async e => {
   const btn = e.target.closest('button'); if (!btn || btn.disabled || !btn.closest('tr')) return;
-  const tr = btn.closest('tr'), slug = tr.dataset.plat;
-  if (!slug) return;
+  const tr = btn.closest('tr'), pick = tr.querySelector('select.pick'), slug = tr.dataset.plat || (pick && pick.value);
+  if (!slug) { if (pick) { pick.focus(); toast('Choose a platform for this result first.', 'bad'); } return; }
   const name = tr.querySelector('td.t').textContent.trim();
   const send = () => api('api/grab', {id: tr.dataset.id, platform: slug, kind: 'rom'});
   btn.disabled = true; btn.textContent = '…';
