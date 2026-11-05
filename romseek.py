@@ -611,6 +611,66 @@ def queue():
     return out
 
 
+# ---------------------------------------------------------------- firmware upload
+UPLOAD_MAX = int(os.environ.get("UPLOAD_MAX_MB", "1024")) * 1024 * 1024
+# Never accept these as "firmware".
+UPLOAD_BLOCK_EXT = {".exe", ".scr", ".com", ".pif", ".bat", ".cmd", ".msi", ".msp", ".hta",
+                    ".cpl", ".jar", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".ps1",
+                    ".psm1", ".reg", ".lnk", ".url", ".dll", ".sh", ".html", ".htm", ".apk"}
+
+
+def upload_firmware(slug, filename, length, stream, offset=0, total=None, upload_id=""):
+    """Receive an uploaded firmware file (optionally in chunks) into library/bios/<slug>/.
+
+    Chunked uploads keep each request under Cloudflare's 100 MB request limit:
+    the browser sends pieces with offset/total/upload_id; the file is checked on
+    its first bytes and moved into place atomically once the last piece lands.
+    """
+    if slug not in SLUGS:
+        raise ValueError("unknown platform")
+    name = safe_name(os.path.basename(filename.replace("\\", "/")))
+    if not name or name.startswith("."):
+        raise ValueError("bad file name")
+    if os.path.splitext(name)[1].lower() in UPLOAD_BLOCK_EXT:
+        raise ValueError("that file type isn't allowed as firmware")
+    total = length if total is None else total
+    if length <= 0 or total <= 0:
+        raise ValueError("empty file")
+    if total > UPLOAD_MAX:
+        raise ValueError(f"file is larger than {UPLOAD_MAX // (1024*1024)} MB")
+    if offset < 0 or offset + length > total:
+        raise ValueError("bad chunk")
+    uid = re.sub(r"[^A-Za-z0-9]", "", upload_id)[:40] or f"{os.getpid()}{threading.get_ident()}"
+    add_platform(slug)
+    d = os.path.join(FIRMWARE, slug)
+    dest, tmp = os.path.join(d, name), os.path.join(d, f".upload-{uid}")
+    if offset == 0 and os.path.exists(tmp):
+        os.remove(tmp)
+    if offset and (not os.path.exists(tmp) or os.path.getsize(tmp) != offset):
+        raise ValueError("upload out of order, please retry")
+    left, done = length, False
+    try:
+        with open(tmp, "ab") as fh:
+            while left:
+                chunk = stream.read(min(left, 1024 * 1024))
+                if not chunk:
+                    raise ValueError("upload interrupted")
+                if offset == 0 and left == length:
+                    if chunk[:2] == b"MZ" or chunk[:4] == b"\x7fELF":
+                        raise ValueError("that's a program, not firmware")
+                fh.write(chunk)
+                left -= len(chunk)
+        if offset + length == total:
+            os.replace(tmp, dest)
+            done = True
+            log("firmware uploaded", slug, name, total)
+    except Exception:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+    return {"platform": slug, "file": name, "size": total, "done": done}
+
+
 # ---------------------------------------------------------------- web
 PAGE = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"), encoding="utf-8").read()
 
@@ -661,6 +721,17 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             n = int(self.headers.get("Content-Length") or 0)
+            u = urllib.parse.urlparse(self.path)
+            if u.path == "/api/firmware":
+                qs = urllib.parse.parse_qs(u.query)
+                fname = urllib.parse.unquote(self.headers.get("X-Filename") or "")
+                g = lambda k, d="": (qs.get(k) or [d])[0]
+                info = upload_firmware(g("platform"), fname, n, self.rfile,
+                                       offset=int(g("offset", "0")), total=int(g("total", str(n))),
+                                       upload_id=g("id"))
+                if info["done"]:
+                    log("  by", self.headers.get("Remote-User", "?"))
+                return self.send(200, info)
             body = json.loads(self.rfile.read(min(n, 10000)) or b"{}")
             if self.path == "/api/grab":
                 grab(str(body.get("id", "")), str(body.get("platform", "")),

@@ -140,6 +140,7 @@ dialog .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
 </main>
 
 <div class="toasts" id="toasts"></div>
+<input type="file" id="fwFile" hidden>
 
 <dialog id="dlg">
   <h3 id="dTitle"></h3>
@@ -224,8 +225,10 @@ async function loadPlatforms() {
       <div class="tags">${p.bios ? biosNeed(p) : '<span class="pill">No BIOS needed</span>'}${p.browser ? '<span class="pill good" title="Plays right in the browser in RomM">▶ RomM compatible</span>' : '<span class="pill" title="RomM stores these; play them in an emulator on your own device">download only</span>'}</div>
       ${p.bios_files ? `<div class="files">${p.bios_names.map(esc).join(', ')}</div>` : ''}
       ${p.bios_note ? `<div class="sub">${esc(p.bios_note)}</div>` : ''}
-      ${p.bios_official ? `<div><a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a></div>`
-        : p.bios ? `<div><button class="sm ${p.bios_files ? 'ghost' : ''}" data-bios="${p.slug}">${p.bios_files ? 'Get more BIOS' : 'Get BIOS'}</button></div>` : ''}
+      ${p.bios ? `<div class="row">${p.bios_official
+          ? `<a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a>`
+          : `<button class="sm ${p.bios_files ? 'ghost' : ''}" data-bios="${p.slug}">${p.bios_files ? 'Get more BIOS' : 'Get BIOS'}</button>`}
+        <button class="sm ghost" data-upload="${p.slug}">Upload firmware</button></div>` : ''}
     </div>`).join('')}</div>`
     : `<div class="empty">No platforms yet. Add one below, or just grab a game and you'll be asked to add its platform.</div>`;
   $('#avail').innerHTML = avail.map(p => `
@@ -257,12 +260,15 @@ function openBios(slug) {
   $('#bf').hidden = !!p.bios_official;
   if (p.bios_official) {
     $('#biosHelp').innerHTML = `${esc(p.bios_note)} Install it in the emulator on the device you play on.`;
-    $('#bres').innerHTML = `<a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a>`;
+    $('#bres').innerHTML = `<div class="row"><a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">1. ${esc(p.bios_official.label)} ↗</a>
+      <button class="sm" data-upload="${p.slug}">2. Upload the downloaded file</button></div>
+      <p class="help">Uploading keeps a copy in RomM, so anyone setting up the emulator can download it from the ${esc(p.label)} page there.</p>`;
     $('#biosPanel').scrollIntoView({behavior: 'smooth', block: 'start'});
     return;
   }
   $('#biosHelp').innerHTML = `Look for small results named like <i>"${esc(p.label)} BIOS"</i>. Big emulator bundles and game packs are usually the wrong thing. Grabbed files go into RomM's ${esc(p.label)} firmware folder.`;
   $('#bq').value = p.bios_query || p.label + ' bios';
+  $('#biosHelp').innerHTML += ` Already have the files? <a href="#" data-upload="${p.slug}">Upload them instead</a>.`;
   $('#biosPanel').scrollIntoView({behavior: 'smooth', block: 'start'});
   biosSearch();
 }
@@ -285,6 +291,36 @@ $('#bres').onclick = async e => {
     b.textContent = 'Added ✓'; toast(`Downloading ${P(biosSlug).label} BIOS. Track it in Library.`, 'good');
     refreshActivity();
   } catch (err) { b.disabled = false; b.textContent = 'Grab BIOS'; toast('Grab failed: ' + err.message, 'bad'); }
+};
+
+/* ---------------- firmware upload ---------------- */
+let upSlug = null;
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-upload]'); if (!t) return;
+  e.preventDefault(); upSlug = t.dataset.upload; $('#fwFile').value = ''; $('#fwFile').click();
+});
+$('#fwFile').onchange = async () => {
+  const f = $('#fwFile').files[0], slug = upSlug; if (!f || !slug) return;
+  const label = P(slug).label, CHUNK = 50 * 1024 * 1024;   // stay under Cloudflare's 100 MB limit
+  const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const t = document.createElement('div'); t.className = 'toast';
+  t.innerHTML = `Uploading <b>${esc(f.name)}</b> to ${esc(label)} firmware… <span>0%</span><div class="bar"><i style="width:0"></i></div>`;
+  $('#toasts').appendChild(t);
+  const show = sent => { const pc = Math.floor(sent / f.size * 100); t.querySelector('span').textContent = pc + '%'; t.querySelector('i').style.width = pc + '%'; };
+  const sendChunk = (offset, blob) => new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `api/firmware?platform=${encodeURIComponent(slug)}&offset=${offset}&total=${f.size}&id=${id}`);
+    xhr.setRequestHeader('X-Filename', encodeURIComponent(f.name));
+    xhr.upload.onprogress = ev => show(offset + ev.loaded);
+    xhr.onload = () => { let d = {}; try { d = JSON.parse(xhr.responseText); } catch {}
+      xhr.status === 200 ? resolve(d) : reject(new Error(d.error || (xhr.status === 413 ? 'file too large for the proxy' : xhr.statusText) || 'error')); };
+    xhr.onerror = () => reject(new Error('connection lost'));
+    xhr.send(blob);
+  });
+  try {
+    for (let off = 0; off < f.size; off += CHUNK) await sendChunk(off, f.slice(off, off + CHUNK));
+    t.remove(); toast(`${f.name} added to ${label} firmware`, 'good'); loadPlatforms();
+  } catch (err) { t.remove(); toast('Upload failed: ' + err.message, 'bad'); }
 };
 
 /* ---------------- game search ---------------- */
