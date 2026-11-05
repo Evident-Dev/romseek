@@ -193,11 +193,13 @@ function addPlatformDialog(p, forGame) {
       ? `This game needs the ${p.label} platform in RomM. Add it now and the download will start straight after.`
       : `Creates the ${p.label} platform in RomM so you can download games into it.`;
     $('#dBiosNote').hidden = !pickBios;
-    $('#dBiosNote').textContent = !pickBios ? '' : p.bios === 'required'
+    $('#dBiosNote').textContent = !pickBios ? '' : p.bios_official
+      ? `${p.bios_note} Next you'll get a link to Sony's download page.`
+      : p.bios === 'required'
       ? `${p.label} needs BIOS files to play. Next you'll pick a BIOS download from the available torrents.`
       : `${p.label} works best with BIOS files. Next you'll pick a BIOS download from the available torrents (you can close it to skip).`;
     $('#dWarn').textContent = p.browser ? '' : `RomM can store ${p.label} games but can't play them in the browser.`;
-    $('#dOk').textContent = pickBios ? (forGame ? 'Add, download & pick BIOS' : 'Add & pick BIOS')
+    $('#dOk').textContent = pickBios ? (p.bios_official ? (forGame ? 'Add platform & download' : 'Add platform') : (forGame ? 'Add, download & pick BIOS' : 'Add & pick BIOS'))
                                      : (forGame ? 'Add platform & download' : 'Add platform');
     const done = v => { $('#dlg').close(); resolve(v); };
     $('#dOk').onclick = async () => {
@@ -221,13 +223,16 @@ async function loadPlatforms() {
       <div class="h"><b>${esc(p.label)}</b><span class="sub">${p.games} game${p.games === 1 ? '' : 's'}</span></div>
       <div class="tags">${p.bios ? biosNeed(p) : '<span class="pill">No BIOS needed</span>'}${p.browser ? '' : '<span class="pill">download only</span>'}</div>
       ${p.bios_files ? `<div class="files">${p.bios_names.map(esc).join(', ')}</div>` : ''}
-      ${p.bios ? `<div><button class="sm ${p.bios_files ? 'ghost' : ''}" data-bios="${p.slug}">${p.bios_files ? 'Get more BIOS' : 'Get BIOS'}</button></div>` : ''}
+      ${p.bios_note ? `<div class="sub">${esc(p.bios_note)}</div>` : ''}
+      ${p.bios_official ? `<div><a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a></div>`
+        : p.bios ? `<div><button class="sm ${p.bios_files ? 'ghost' : ''}" data-bios="${p.slug}">${p.bios_files ? 'Get more BIOS' : 'Get BIOS'}</button></div>` : ''}
     </div>`).join('')}</div>`
     : `<div class="empty">No platforms yet. Add one below, or just grab a game and you'll be asked to add its platform.</div>`;
   $('#avail').innerHTML = avail.map(p => `
     <div class="card add" data-add="${p.slug}">
       <div class="h"><b>${esc(p.label)}</b><span class="sub">+ Add</span></div>
       <div class="tags">${p.bios ? `<span class="pill ${p.bios === 'required' ? 'need' : 'soft'}">BIOS ${esc(p.bios)}</span>` : '<span class="pill">No BIOS needed</span>'}${p.browser ? '' : '<span class="pill">download only</span>'}</div>
+      ${p.bios_note ? `<div class="sub">${esc(p.bios_note)}</div>` : ''}
     </div>`).join('');
   // refresh platform dropdowns in game results, keeping choices
   document.querySelectorAll('#res select').forEach(s => { const v = s.value; s.innerHTML = platOptions(v); });
@@ -248,7 +253,14 @@ function openBios(slug) {
   const p = P(slug); biosSlug = slug;
   show('platforms');
   $('#biosPanel').hidden = false;
-  $('#biosTitle').textContent = `Find BIOS for ${p.label}`;
+  $('#biosTitle').textContent = p.bios_official ? `Firmware for ${p.label}` : `Find BIOS for ${p.label}`;
+  $('#bf').hidden = !!p.bios_official;
+  if (p.bios_official) {
+    $('#biosHelp').innerHTML = `${esc(p.bios_note)} Install it in the emulator on the device you play on.`;
+    $('#bres').innerHTML = `<a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a>`;
+    $('#biosPanel').scrollIntoView({behavior: 'smooth', block: 'start'});
+    return;
+  }
   $('#biosHelp').innerHTML = `Look for small results named like <i>"${esc(p.label)} BIOS"</i>. Big emulator bundles and game packs are usually the wrong thing. Grabbed files go into RomM's ${esc(p.label)} firmware folder.`;
   $('#bq').value = p.bios_query || p.label + ' bios';
   $('#biosPanel').scrollIntoView({behavior: 'smooth', block: 'start'});

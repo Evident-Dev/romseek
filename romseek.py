@@ -90,11 +90,37 @@ BIOS = {
     "neogeomvs": "required", "ps2": "required", "dc": "required",
     "psx": "recommended", "arcade": "some games",
     "gba": "optional", "nds": "optional",
+    "xbox": "required", "ps3": "required", "psvita": "required", "switch": "required",
+    "wiiu": "some games", "3ds": "some games",
+}
+# One-line explanation shown on the platform card.
+BIOS_NOTE = {
+    "ps2": "PCSX2 needs a PS2 BIOS dump (e.g. SCPH-39001).",
+    "dc": "Flycast needs dc_boot.bin and dc_flash.bin.",
+    "xbox": "xemu needs the MCPX boot ROM, a flash BIOS image and a hard-disk image.",
+    "ps3": "RPCS3 needs Sony's PS3 system software (PS3UPDAT.PUP). It's a free download from Sony.",
+    "psvita": "Vita3K needs Sony's PS Vita firmware (PSVUPDAT.PUP). It's a free download from Sony.",
+    "switch": "Needs system files dumped from your own Switch. Follow your emulator's setup guide.",
+    "wiiu": "Encrypted games need files dumped from your own Wii U (see Cemu's setup guide); decrypted dumps play without them.",
+    "3ds": "Encrypted games need files dumped from your own 3DS (see Azahar's setup guide); decrypted games play without them.",
+    "segacd": "Needs the Sega CD / Mega-CD BIOS for your region.",
+    "saturn": "Needs the Saturn BIOS (sega_101.bin / mpr-17933.bin).",
+    "psx": "Most games run without it; some need a PS1 BIOS (e.g. scph5501.bin).",
+    "neogeoaes": "Needs neogeo.zip.", "neogeomvs": "Needs neogeo.zip.",
+    "arcade": "Some arcade sets need BIOS zips (e.g. neogeo.zip).",
+    "gba": "Optional: games run without it; the real BIOS improves compatibility.",
+    "nds": "Optional: games run without it; the real BIOS improves compatibility.",
+}
+# Firmware the maker gives away: link to the official page instead of searching torrents.
+BIOS_OFFICIAL = {
+    "ps3": ("Get PS3 system software from Sony", "https://www.playstation.com/en-us/support/hardware/ps3/system-software/"),
+    "psvita": ("Get PS Vita firmware from Sony", "https://www.playstation.com/en-us/support/hardware/psvita/system-software/"),
 }
 BIOS_QUERY = {
     "psx": "psx bios", "ps2": "ps2 bios", "segacd": "sega cd bios",
     "saturn": "sega saturn bios", "dc": "dreamcast bios", "neogeoaes": "neogeo bios",
     "neogeomvs": "neogeo bios", "arcade": "mame bios", "gba": "gba bios", "nds": "nds bios",
+    "xbox": "xbox bios mcpx",
 }
 # Firmware RomM wants as the zip itself (e.g. neogeo.zip), never extracted.
 KEEP_ZIP = {"neogeoaes", "neogeomvs", "arcade"}
@@ -270,6 +296,8 @@ def platform_info(slug):
         "emulators": [{"name": n, "url": u} for n, u in EMULATORS.get(slug, [])],
         "romm_id": romm_index()["platforms"].get(slug),
         "bios_query": BIOS_QUERY.get(slug, ""), "browser": slug in BROWSER,
+        "bios_note": BIOS_NOTE.get(slug, ""),
+        "bios_official": dict(zip(("label", "url"), BIOS_OFFICIAL[slug])) if slug in BIOS_OFFICIAL else None,
     }
 
 
