@@ -104,6 +104,9 @@ a.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--ac
 .setup .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px}
 .setup .box h4{margin:0;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .setup .box p{margin:0;color:var(--text);font-size:14px}
+.rbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 4px}
+.rbar label{font-family:var(--display,inherit);font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.rbar select{min-width:200px}
 .toolbar{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-top:6px}
 .toolbar input[type=search]{flex:0 1 240px}
 /* ---- library: game tiles ---- */
@@ -254,7 +257,7 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
     <input type="search" id="q" placeholder="Game name, e.g. Chrono Trigger" autocomplete="off">
     <button id="go">Search</button>
   </form>
-  <p class="help">Check the platform on each result, then <b>Grab</b>. If that platform isn't set up in RomM yet, you'll be asked to add it first. Progress shows in the <a href="#library">Library</a> tab.</p>
+  <p class="help">Each result shows the system it's for. Use the <b>Platform</b> filter to narrow the list, then <b>Grab</b>. If that platform isn't set up in RomM yet, you'll be asked to add it first. Progress shows in the <a href="#library">Library</a> tab.</p>
   <div id="res"></div>
 </section>
 
@@ -425,7 +428,7 @@ async function loadPlatforms() {
       ${p.bios_note ? `<div class="sub">${esc(p.bios_note)}</div>` : ''}
     </div>`).join('');
   // refresh platform dropdowns in game results, keeping choices
-  document.querySelectorAll('#res select').forEach(s => { const v = s.value; s.innerHTML = platOptions(v); });
+  if ($('#rtable')) renderResults();
   if ($('#tab-library').classList.contains('on')) renderLib();
 }
 $('#avail').onclick = async e => {
@@ -568,34 +571,53 @@ $('#fwFile').onchange = async () => {
 };
 
 /* ---------------- game search ---------------- */
-function platOptions(sel) {
-  const mine = PLAT.filter(p => p.exists), other = PLAT.filter(p => !p.exists);
-  const o = p => `<option value="${p.slug}"${p.slug === sel ? ' selected' : ''}>${esc(p.label)}</option>`;
-  return `<option value="">Choose platform…</option>` +
-    (mine.length ? `<optgroup label="Set up in RomM">${mine.map(o).join('')}</optgroup>` : '') +
-    `<optgroup label="Not set up yet (you'll be asked to add it)">${other.map(o).join('')}</optgroup>`;
-}
+// Each result's platform is fixed to what RomSeek detected; the filter above
+// the results only offers platforms that actually appear in them.
+let RES = [];
 function resultTable(d, action) {
-  return `<table><thead><tr><th>Title</th><th>Size</th><th>Seeds</th><th>Source</th><th></th></tr></thead><tbody>${
-    d.map(x => `<tr data-id="${x.id}"><td class="t">${x.info ? `<a href="${esc(x.info)}" target="_blank" rel="noopener" style="color:inherit">${esc(x.title)}</a>` : esc(x.title)}</td>
+  return `<table><thead><tr><th>Title</th><th>Size</th><th>Seeds</th><th>Source</th><th>Platform</th><th></th></tr></thead><tbody>${
+    d.map(x => `<tr data-id="${x.id}" data-plat="${x.platform || ''}"><td class="t">${x.info ? `<a href="${esc(x.info)}" target="_blank" rel="noopener" style="color:inherit">${esc(x.title)}</a>` : esc(x.title)}</td>
     <td class="n">${size(x.size)}</td><td class="n">${x.seeders}</td><td class="n">${esc(x.indexer)}</td>
+    <td class="n">${platPill(x.platform)}</td>
     <td class="a">${action(x)}</td></tr>`).join('')}</tbody></table>`;
+}
+function platPill(slug) {
+  if (!slug) return '<span class="pill need" title="RomSeek couldn\'t tell which system this is for, so it can\'t be grabbed">Unknown</span>';
+  const p = P(slug);
+  return `<span class="pill ${p.exists ? 'good' : ''}" title="${p.exists ? 'Set up in RomM' : 'Not set up in RomM yet: you\'ll be asked to add it'}">${esc(p.label)}</span>`;
+}
+function renderResults() {
+  const pf = $('#rplat') ? $('#rplat').value : '';
+  const rows = RES.filter(x => !pf || (pf === '?' ? !x.platform : x.platform === pf));
+  $('#rtable').innerHTML = !rows.length ? '<div class="msg">No results for that platform.</div>'
+    : resultTable(rows, x => x.platform
+        ? `<button class="sm">Grab</button>`
+        : `<button class="sm" disabled title="Unknown platform">Grab</button>`);
 }
 $('#f').onsubmit = async e => {
   e.preventDefault();
   const q = $('#q').value.trim(); if (!q) return;
   $('#go').disabled = true; $('#res').innerHTML = '<div class="msg">Searching…</div>';
   try {
-    const d = await api('api/search?q=' + encodeURIComponent(q));
-    $('#res').innerHTML = !d.length ? '<div class="msg">No results. Try fewer words.</div>'
-      : resultTable(d, x => `<select>${platOptions(x.platform)}</select> <button class="sm">Grab</button>`);
+    RES = await api('api/search?q=' + encodeURIComponent(q));
+    if (!RES.length) { $('#res').innerHTML = '<div class="msg">No results. Try fewer words.</div>'; return; }
+    const counts = {}; let unknown = 0;
+    RES.forEach(x => x.platform ? counts[x.platform] = (counts[x.platform] || 0) + 1 : unknown++);
+    const opts = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || P(a).label.localeCompare(P(b).label))
+      .map(sl => `<option value="${sl}">${esc(P(sl).label)} (${counts[sl]})</option>`).join('');
+    $('#res').innerHTML = `<div class="rbar"><label for="rplat">Platform</label>
+        <select id="rplat"><option value="">All platforms (${RES.length})</option>${opts}${unknown ? `<option value="?">Unknown (${unknown})</option>` : ''}</select>
+        <span class="help" style="margin:0">${RES.length} result${RES.length === 1 ? '' : 's'}</span></div>
+      <div id="rtable"></div>`;
+    $('#rplat').onchange = renderResults;
+    renderResults();
   } catch (err) { $('#res').innerHTML = `<div class="msg err">Search failed: ${esc(err.message)}</div>`; }
   finally { $('#go').disabled = false; }
 };
 $('#res').onclick = async e => {
-  const btn = e.target.closest('button'); if (!btn) return;
-  const tr = btn.closest('tr'), sel = tr.querySelector('select'), slug = sel.value;
-  if (!slug) { sel.focus(); sel.style.borderColor = 'var(--bad)'; toast('Choose a platform for this game first.', 'bad'); return; }
+  const btn = e.target.closest('button'); if (!btn || btn.disabled || !btn.closest('tr')) return;
+  const tr = btn.closest('tr'), slug = tr.dataset.plat;
+  if (!slug) return;
   const name = tr.querySelector('td.t').textContent.trim();
   const send = () => api('api/grab', {id: tr.dataset.id, platform: slug, kind: 'rom'});
   btn.disabled = true; btn.textContent = '…';
