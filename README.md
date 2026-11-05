@@ -53,7 +53,7 @@ If your layout differs, set `QBIT_SAVE_PATH` and `ROMM_LIBRARY` accordingly.
        reverse_proxy romseek:8000
    }
    ```
-4. Optional, for direct game links in the Library tab: in RomM go to *Client API Tokens* and create a token with only **View ROMs** and **View platforms**, then put it in `ROMM_API_TOKEN`.
+4. Optional, for direct game links in the Library tab: in RomM go to *Client API Tokens* and create a token with **View ROMs** and **View platforms**, then put it in `ROMM_API_TOKEN`. Add **Edit ROMs** as well if admins should be able to fix metadata and remove games (see below).
 
 romseek creates a qBittorrent category `roms` on first start.
 
@@ -80,6 +80,17 @@ Each search result's system is worked out, in order, from:
 4. **Your earlier choices**: picking a system for an unknown result is remembered for that title (`state/learned.json`).
 
 **Check files** asks the swarm for a torrent's file list (`stopCondition=MetadataReceived`, deleted right after, nothing downloaded) and reads the extensions. It needs peers, so it won't work on dead torrents. A **size?** badge flags results too big for one game on the detected system.
+
+## Managing games (admins)
+
+Users in `ADMIN_GROUPS` (default `admins`, read from the forward-auth `Remote-Groups` header) get a ⋮ menu on every game tile:
+
+- **Metadata lookup:** searches every metadata provider enabled in RomM (LaunchBox, IGDB, ScreenScraper, MobyGames, …) and applies the match you pick. RomM then fetches the full details and cover itself. If a name finds nothing, RomSeek retries with the closest real titles from its title database and shows them as suggestions.
+- **Disc and product IDs:** files named like `RZDP01.wbfs` (Wii/GameCube) or `BLUS30443` (PS3) are translated with [GameTDB](https://www.gametdb.com) title lists, which also supply a cover.
+- **Edit details:** set the title, year, genres, cover URL and description by hand.
+- **Clear metadata** and **Remove game**. Remove deletes the library file and the RomM entry, and can also delete the torrent and its download.
+
+These need the **Edit ROMs** scope on the RomM token. LaunchBox search needs RomM's local LaunchBox database, so set `ENABLE_SCHEDULED_UPDATE_LAUNCHBOX_METADATA=true` in RomM and run its *Update LaunchBox metadata* task once. ScreenScraper (`SCREENSCRAPER_USER`/`_PASSWORD`) and IGDB (`IGDB_CLIENT_ID`/`_SECRET`) accounts are free and add many more matches.
 
 ## Homepage widget
 

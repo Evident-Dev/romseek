@@ -1128,6 +1128,336 @@ def delete_firmware(slug, filename):
     return platform_info(slug)
 
 
+
+# ---------------------------------------------------------------- admin: game management
+# Admins (ADMIN_GROUPS, matched against the forward-auth Remote-Groups header)
+# get a per-game menu: metadata lookup/apply, manual edits, unmatch, remove.
+ADMIN_GROUPS = {g.strip() for g in os.environ.get("ADMIN_GROUPS", "admins").split(",") if g.strip()}
+
+
+def is_admin(headers):
+    groups = {g.strip() for g in (headers.get("Remote-Groups") or "").split(",")}
+    return bool(groups & ADMIN_GROUPS)
+
+
+def romm_call(method, path, fields=None, query=None, json_body=None, timeout=90):
+    """Call the RomM API with the client token. `fields` -> multipart form."""
+    if not ROMM_TOKEN:
+        raise ValueError("RomM isn't linked (set ROMM_API_TOKEN)")
+    url = ROMM_URL + path + ("?" + urllib.parse.urlencode(query) if query else "")
+    hdr = {"Authorization": f"Bearer {ROMM_TOKEN}", "User-Agent": "romseek"}
+    data = None
+    if fields is not None:
+        boundary = "----romseek" + hashlib.md5(os.urandom(8)).hexdigest()
+        data = b"".join(f"--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode()
+                        for k, v in fields.items()) + f"--{boundary}--\r\n".encode()
+        hdr["Content-Type"] = f"multipart/form-data; boundary={boundary}"
+    elif json_body is not None:
+        data, hdr["Content-Type"] = json.dumps(json_body).encode(), "application/json"
+    req = urllib.request.Request(url, data=data, headers=hdr, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            raw = r.read()
+    except urllib.error.HTTPError as e:
+        try:
+            detail = json.loads(e.read()).get("detail")
+        except Exception:
+            detail = None
+        if e.code == 403:
+            raise ValueError("RomM refused: the RomSeek API token needs the 'Edit ROMs' (roms.write) scope")
+        raise ValueError(f"RomM: {detail or e.reason} ({e.code})")
+    return json.loads(raw) if raw.strip() else {}
+
+
+def romm_changed():
+    _ROMM_CACHE["t"] = 0
+    _IMG_CACHE.clear()
+
+
+# GameTDB title lists: Wii/GameCube/Wii U/3DS/PS3/Switch releases are often named
+# by disc/product ID (RZDP01, BLUS30443), which no metadata provider can match.
+GAMETDB = {"wii": "wiitdb", "ngc": "wiitdb", "wiiu": "wiiutdb", "3ds": "3dstdb",
+           "ps3": "ps3tdb", "switch": "switchtdb"}
+GAMETDB_ART = {"wii": "wii", "ngc": "wii", "wiiu": "wiiu", "3ds": "3ds", "ps3": "ps3", "switch": "switch"}
+_TDB, _TDB_T = {}, {}
+
+
+def gametdb(db):
+    if db in _TDB and time.time() - _TDB_T.get(db, 0) < 30 * 86400:
+        return _TDB[db]
+    path = os.path.join(STATE_DIR, db + ".txt")
+    try:
+        if not os.path.exists(path) or time.time() - os.path.getmtime(path) > 30 * 86400:
+            raw = http(f"https://www.gametdb.com/{db}.txt?LANG=EN", headers={"User-Agent": "romseek"}, timeout=60).read()
+            if raw.startswith(b"TITLES"):
+                with open(path + ".tmp", "wb") as f:
+                    f.write(raw)
+                os.replace(path + ".tmp", path)
+        with open(path, encoding="utf-8", errors="replace") as f:
+            _TDB[db] = dict(l.rstrip("\n").split(" = ", 1) for l in f if " = " in l and not l.startswith("TITLES"))
+    except Exception as e:
+        log("gametdb:", db, repr(e))
+        _TDB.setdefault(db, {})
+    _TDB_T[db] = time.time()
+    return _TDB[db]
+
+
+ID_RX = re.compile(r"\b([A-Z0-9]{6}|[A-Z]{4}-?\d{5}|[0-9A-F]{16})\b")
+
+
+def disc_id_lookup(slug, name):
+    """('RZDP01', 'The Legend of Zelda: Twilight Princess', cover_url) or None."""
+    db = GAMETDB.get(slug)
+    if not db:
+        return None
+    stem = os.path.splitext(name)[0].upper()
+    tdb = gametdb(db)
+    for m in ID_RX.finditer(stem):
+        gid = m.group(1).replace("-", "")
+        if gid.isalpha() or gid.isdigit():
+            continue
+        for key in ((gid, gid[:4]) if slug == "3ds" else (gid,)):
+            if key in tdb:
+                region = {"E": "US", "P": "EN", "J": "JA", "K": "KO", "D": "DE", "F": "FR"}.get(gid[3:4], "EN") \
+                    if slug in ("wii", "ngc", "wiiu") else "US"
+                return key, tdb[key], gametdb_cover(slug, key, region)
+    return None
+
+
+_COVER_OK = {}
+
+
+def gametdb_cover(slug, key, region):
+    """First GameTDB front cover that exists (region first, then US/EN)."""
+    for reg in dict.fromkeys((region, "US", "EN")):
+        url = f"https://art.gametdb.com/{GAMETDB_ART[slug]}/cover/{reg}/{key}.png"
+        if url not in _COVER_OK:
+            try:
+                http(url, headers={"User-Agent": "romseek"}, timeout=10).read(64)
+                _COVER_OK[url] = True
+            except Exception:
+                _COVER_OK[url] = False
+        if _COVER_OK[url]:
+            return url
+    return ""
+
+
+def _smart_title(k):
+    small = {"of", "the", "a", "an", "and", "in", "on", "to", "vs"}
+    return " ".join(w if w.isdigit() else (w if i and w in small else w.capitalize()) for i, w in enumerate(k.split()))
+
+
+def title_suggestions(slug, term, limit=6):
+    """Real game names close to `term` for this system: GameTDB (proper names) for
+    Nintendo disc systems, otherwise the No-Intro/Redump title database.
+    Scored mostly on how many of the typed words appear in the title, letters-only,
+    so 'Windwaker' still finds 'The Wind Waker'."""
+    words = set(title_key(term).split())
+    if not words:
+        return []
+    def score(k):
+        ws, compact = set(k.split()), k.replace(" ", "")
+        cov = sum(1 for w in words if w in ws or (len(w) > 3 and w in compact)) / len(words)
+        return cov, 0.75 * cov + 0.25 * len(ws & words) / len(ws | words)
+    names = {}
+    db = GAMETDB.get(slug)
+    if db:
+        for name in gametdb(db).values():
+            name = re.sub(r"\s*\([^)]*\)", "", name).strip()     # drop (Demo), (Rev 1)…
+            k = title_key(name)
+            if k and (k not in names or len(name) < len(names[k])):
+                names[k] = name
+    else:
+        names = {k: _smart_title(k) for k, plats in _TITLES.items() if slug in plats}
+    scored = []
+    for k, name in names.items():
+        cov, sc = score(k)
+        if cov >= 0.5:
+            scored.append((sc, -len(k), name))
+    scored.sort(reverse=True)
+    out = []
+    for sc, _, name in scored:
+        if sc < 0.45 or len(out) >= limit:
+            break
+        if name.lower() != term.lower() and name not in out:
+            out.append(name)
+    return out
+
+
+def library_entry(slug, name):
+    if slug not in SLUGS or not name or "/" in name or name.startswith(".") or name in ("..",):
+        raise ValueError("unknown game")
+    path = os.path.join(LIBRARY, slug, name)
+    if not os.path.lexists(path):
+        raise ValueError("game not found on disk")
+    return path
+
+
+def clean_term(name):
+    t = os.path.splitext(name)[0] if re.search(r"\.[A-Za-z0-9]{2,4}$", name) else name
+    t = re.sub(r"[\[(][^\])]*[\])]", " ", t)
+    t = re.sub(r"[._]+", " ", t)
+    t = re.sub(r"\b(ps2|ps1|psx|ngc|wii|pal|ntsc|usa|eur|multi\d*|rare|iso|wbfs|rvz|nsp|xci)\b", " ", t, flags=re.I)
+    return re.sub(r"\s+", " ", t).strip(" -#")
+
+
+PROVIDER_KEYS = [("igdb_id", "IGDB"), ("ss_id", "ScreenScraper"), ("moby_id", "MobyGames"),
+                 ("launchbox_id", "LaunchBox"), ("flashpoint_id", "Flashpoint"), ("steam_id", "Steam"),
+                 ("demozoo_id", "Demozoo"), ("libretro_id", "Libretro")]
+RICH_KEYS = {"igdb_id", "ss_id", "moby_id", "launchbox_id", "flashpoint_id", "steam_id", "demozoo_id"}
+
+
+def meta_search(slug, name, rom_id, term):
+    hint = disc_id_lookup(slug, name)
+    term = (term or "").strip() or (hint[1] if hint else clean_term(name))
+    out, err = [], ""
+    if hint:
+        out.append({"source": "GameTDB", "name": hint[1], "cover": hint[2], "ids": {},
+                    "summary": f"Disc / product ID {hint[0]}. GameTDB gives the title and cover only; "
+                               "pick a LaunchBox/IGDB result for a description and details.",
+                    "year": None, "platform": slug})
+    def provider(q):
+        try:
+            return romm_call("GET", "/api/search/roms", query={"rom_id": rom_id, "search_term": q, "search_by": "name"}) or []
+        except ValueError as e:
+            nonlocal err
+            err = str(e); return []
+    suggestions = title_suggestions(slug, term)
+    res = provider(term) if rom_id else []
+    tried = [term]
+    # Providers match names closely: if nothing came back, retry with the nearest real titles.
+    for alt in suggestions:
+        if not rom_id or sum(1 for r in res if any(r.get(k) for k in RICH_KEYS)) >= 3 or len(tried) >= 4:
+            break
+        res += provider(alt); tried.append(alt)
+    seen = set()
+    for r in res:
+        if True:
+            ids = {k: r[k] for k, _ in PROVIDER_KEYS if r.get(k)}
+            key = tuple(sorted(ids.items()))
+            if not ids or key in seen:
+                continue
+            seen.add(key)
+            ms = r.get("first_release_date") or (r.get("launchbox_metadata") or {}).get("first_release_date")
+            year = None
+            if isinstance(ms, (int, float)) and ms > 0:
+                year = time.gmtime(ms / 1000 if ms > 1e11 else ms).tm_year
+            cover = r.get("url_cover") or next((r.get(k.split("_")[0] + "_url_cover") for k, _ in PROVIDER_KEYS
+                                               if k in ids and r.get(k.split("_")[0] + "_url_cover")), "")
+            out.append({"source": " + ".join(lbl for k, lbl in PROVIDER_KEYS if k in ids), "name": r.get("name") or "",
+                        "cover": cover or "", "ids": ids, "summary": (r.get("summary") or "")[:600],
+                        "year": year, "platform": slug})
+    out.sort(key=lambda x: (not (set(x["ids"]) & RICH_KEYS)) if x["source"] != "GameTDB" else -1)
+    return {"term": term, "results": out, "error": err, "tried": tried,
+            "suggestions": [x for x in suggestions if x not in tried],
+            "disc_id": {"id": hint[0], "title": hint[1]} if hint else None,
+            "providers": romm_providers()}
+
+
+_PROV = {"t": 0, "v": []}
+
+
+def romm_providers():
+    """Which metadata providers RomM has switched on (for the dialog's footer)."""
+    if time.time() - _PROV["t"] < 600:
+        return _PROV["v"]
+    try:
+        hb = json.loads(http(ROMM_URL + "/api/heartbeat", timeout=10).read())
+        m = hb.get("METADATA_SOURCES") or {}
+        _PROV["v"] = sorted(k.replace("_API_ENABLED", "").replace("_ENABLED", "").title()
+                            for k, v in m.items() if v is True and k.endswith("API_ENABLED"))
+    except Exception:
+        pass
+    _PROV["t"] = time.time()
+    return _PROV["v"]
+
+
+def meta_apply(rom_id, match):
+    """Use a lookup result: provider IDs make RomM fetch full metadata itself."""
+    rom_id = int(rom_id)
+    fields = {k: str(v) for k, v in (match.get("ids") or {}).items() if k in dict(PROVIDER_KEYS)}
+    if match.get("cover"):
+        fields["url_cover"] = match["cover"]
+    if not (set(fields) & RICH_KEYS) and match.get("name"):
+        fields["name"] = match["name"]          # GameTDB / title-only result
+    if not fields:
+        raise ValueError("nothing to apply")
+    r = romm_call("PUT", f"/api/roms/{rom_id}", fields=fields)
+    romm_changed()
+    log("metadata applied", rom_id, fields)
+    return {"ok": True, "name": r.get("name")}
+
+
+def meta_edit(rom_id, body):
+    fields = {}
+    for k in ("name", "summary", "url_cover"):
+        if k in body:
+            fields[k] = str(body[k] or "").strip()
+    manual = {}
+    if body.get("genres") is not None:
+        manual["genres"] = [g.strip() for g in str(body["genres"]).split(",") if g.strip()]
+    if body.get("year"):
+        y = int(body["year"])
+        if not 1970 <= y <= 2100:
+            raise ValueError("year looks wrong")
+        manual["first_release_date"] = int(time.mktime((y, 1, 1, 12, 0, 0, 0, 0, 0))) * 1000
+    if manual:
+        fields["raw_manual_metadata"] = json.dumps(manual)
+    if not fields:
+        raise ValueError("nothing to change")
+    romm_call("PUT", f"/api/roms/{int(rom_id)}", fields=fields)
+    romm_changed()
+    log("metadata edited", rom_id, sorted(fields))
+    return {"ok": True}
+
+
+def meta_unmatch(rom_id):
+    romm_call("PUT", f"/api/roms/{int(rom_id)}", fields={}, query={"unmatch_metadata": "true"})
+    romm_changed()
+    log("metadata unmatched", rom_id)
+    return {"ok": True}
+
+
+def game_torrents(slug, name):
+    """qBittorrent torrents (category roms, tag rom:<slug>) that produced this library entry."""
+    try:
+        ts = json.loads(qbit("torrents/info?" + urllib.parse.urlencode({"category": CATEGORY, "tag": f"rom:{slug}"})))
+    except Exception:
+        return []
+    out = []
+    for t in ts:
+        if t.get("name") == name or os.path.splitext(t.get("name", ""))[0] == os.path.splitext(name)[0]:
+            out.append(t); continue
+        try:
+            files = json.loads(qbit("torrents/files?hash=" + t["hash"]))
+        except Exception:
+            continue
+        if any(os.path.basename(f["name"]) == name or f["name"].split("/")[0] == name for f in files):
+            out.append(t)
+    return [{"hash": t["hash"], "name": t["name"]} for t in out]
+
+
+def remove_game(slug, name, rom_id, delete_torrent):
+    """Delete the library copy (and RomM's entry). Optionally drop the torrent + its download."""
+    import shutil
+    path = library_entry(slug, name)
+    torrents = game_torrents(slug, name) if delete_torrent else []
+    if rom_id:
+        try:
+            romm_call("POST", "/api/roms/delete", json_body={"roms": [int(rom_id)], "delete_from_fs": []})
+        except ValueError as e:
+            log("RomM delete failed (file still removed):", e)
+    shutil.rmtree(path) if os.path.isdir(path) and not os.path.islink(path) else os.remove(path)
+    for t in torrents:
+        qbit("torrents/delete", {"hashes": t["hash"], "deleteFiles": "true"})
+        STATUS.pop(t["hash"], None)
+    if torrents:
+        save_status()
+    romm_changed()
+    log("game removed", slug, name, f"torrents: {len(torrents)}")
+    return {"ok": True, "torrents": len(torrents)}
+
+
 # ---------------------------------------------------------------- web
 PAGE = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"), encoding="utf-8").read()
 
@@ -1179,7 +1509,7 @@ class H(BaseHTTPRequestHandler):
                     return self.send(404, {"error": "no logo"})
                 return self.send(200, data, ctype, cache="private, max-age=604800")
             if u.path == "/api/config":
-                return self.send(200, {"romm": ROMM_PUBLIC, "linked": bool(ROMM_TOKEN),
+                return self.send(200, {"romm": ROMM_PUBLIC, "linked": bool(ROMM_TOKEN), "admin": is_admin(self.headers),
                                        "romm_error": romm_index()["error"]})
             if u.path == "/api/stats":
                 # For dashboard widgets (e.g. Homepage "customapi"): small, cheap counts.
@@ -1193,9 +1523,19 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, library())
             if u.path == "/api/queue":
                 return self.send(200, queue())
+            if u.path in ("/api/game/meta", "/api/game/torrents"):
+                if not is_admin(self.headers):
+                    return self.send(403, {"error": "admins only"})
+                g = lambda k: (qs.get(k) or [""])[0]
+                library_entry(g("platform"), g("name"))
+                if u.path == "/api/game/torrents":
+                    return self.send(200, game_torrents(g("platform"), g("name")))
+                return self.send(200, meta_search(g("platform"), g("name"), g("rom_id"), g("q")))
             if u.path == "/healthz":
                 return self.send(200, {"ok": True})
             return self.send(404, {"error": "not found"})
+        except ValueError as e:
+            return self.send(400, {"error": str(e)})
         except Exception as e:
             log("GET error:", u.path, repr(e))
             return self.send(502, {"error": str(e)})
@@ -1214,7 +1554,28 @@ class H(BaseHTTPRequestHandler):
                 if info["done"]:
                     log("  by", self.headers.get("Remote-User", "?"))
                 return self.send(200, info)
-            body = json.loads(self.rfile.read(min(n, 10000)) or b"{}")
+            body = json.loads(self.rfile.read(min(n, 20000)) or b"{}")
+            if self.path.startswith("/api/game/"):
+                if not is_admin(self.headers):
+                    return self.send(403, {"error": "admins only"})
+                who = self.headers.get("Remote-User", "?")
+                act = self.path.rsplit("/", 1)[-1]
+                rid = body.get("rom_id")
+                if act == "remove":
+                    r = remove_game(str(body.get("platform", "")), str(body.get("name", "")), rid,
+                                    bool(body.get("delete_torrent")))
+                elif not rid:
+                    raise ValueError("RomM hasn't scanned this game yet; try again in a minute")
+                elif act == "apply":
+                    r = meta_apply(rid, body.get("match") or {})
+                elif act == "edit":
+                    r = meta_edit(rid, body)
+                elif act == "unmatch":
+                    r = meta_unmatch(rid)
+                else:
+                    return self.send(404, {"error": "not found"})
+                log("  by", who)
+                return self.send(200, r)
             if self.path == "/api/peek":
                 return self.send(200, peek(str(body.get("id", ""))))
             if self.path == "/api/grab":

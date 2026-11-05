@@ -261,6 +261,44 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
 @media (min-width:1440px){.top,nav,main{max-width:1360px}.games{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:18px}.systems{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}}
 @media (min-width:1800px){.top,nav,main{max-width:1640px}.games{grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:20px}.systems{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px}.hero h3{font-size:30px}}
 @media (min-width:2400px){.top,nav,main{max-width:2100px}.games{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}}
+/* ===== admin: game menu ===== */
+.game .kebab{position:absolute;top:6px;right:6px;z-index:2;width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1;
+  background:rgba(10,12,16,.78);border:1px solid var(--line-strong);color:#fff;opacity:0;transition:opacity .15s;backdrop-filter:blur(4px)}
+.game:hover .kebab,.game .kebab:focus-visible,.game .kebab[aria-expanded=true]{opacity:1}
+@media (hover:none){.game .kebab{opacity:1}}
+.game .kebab:hover{background:var(--panel2)!important;box-shadow:none!important;border-color:var(--accent)!important}
+.gmenu{position:absolute;z-index:40;min-width:210px;background:var(--panel);border:1px solid var(--line-strong);box-shadow:0 18px 50px -12px rgba(0,0,0,.8);padding:4px;display:flex;flex-direction:column}
+.gmenu button,.gmenu a{all:unset;cursor:pointer;padding:9px 12px;font-size:14px;color:var(--text);display:flex;gap:10px;align-items:center}
+.gmenu button:hover,.gmenu a:hover,.gmenu button:focus-visible,.gmenu a:focus-visible{background:var(--panel2);color:#fff}
+.gmenu .ico{width:18px;text-align:center;opacity:.8}
+.gmenu hr{border:0;border-top:1px solid var(--line);margin:4px 0}
+.gmenu .danger{color:var(--bad)}
+.gmenu .dis{opacity:.45;pointer-events:none}
+.mdlg{max-width:760px;width:calc(100% - 32px)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:-2px 0 10px}
+.chips:empty{display:none}
+.chips .lbl{font-size:12px;color:var(--muted);align-self:center;margin-right:2px}
+.chips button{padding:4px 10px;font-size:12px;background:var(--bg-2);border:1px solid var(--line-strong);color:var(--text)}
+.mres{display:flex;flex-direction:column;gap:8px;max-height:min(58vh,560px);overflow:auto}
+.mres .hit{display:grid;grid-template-columns:72px 1fr auto;gap:12px;align-items:start;padding:10px;background:var(--bg-2);border:1px solid var(--line)}
+.mres .hit.cur{border-color:var(--ok)}
+.mres .hit img,.mres .hit .noimg{width:72px;height:96px;object-fit:cover;background:#0a0c10;display:block}
+.mres .hit b{color:#fff;font-size:15px;display:block}
+.mres .hit .src{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
+.mres .hit .src span{font-family:var(--display,inherit);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:2px 6px;border:1px solid var(--line-strong);color:var(--muted)}
+.mres .hit .src span.rich{color:var(--accent);border-color:var(--accent)}
+.mres .hit p{margin:0;color:var(--muted);font-size:13px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.mres .hit button{white-space:nowrap}
+.mres .none{padding:18px;text-align:center;color:var(--muted);border:1px dashed var(--line)}
+.eform{display:grid;grid-template-columns:150px 1fr;gap:16px}
+.eform .btns{grid-column:1/-1}
+.eprev img{width:150px;aspect-ratio:3/4;object-fit:contain;background:#0a0c10;border:1px solid var(--line);display:block}
+.efields{display:flex;flex-direction:column;gap:10px}
+.efields label{display:flex;flex-direction:column;gap:4px;margin:0;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.efields input,.efields textarea{text-transform:none;letter-spacing:0;font-size:14px;color:var(--text);width:100%;box-sizing:border-box}
+.efields textarea{resize:vertical;font:inherit;background:var(--bg-2);border:1px solid var(--line-strong);padding:9px 11px;color:var(--text)}
+.erow{display:grid;grid-template-columns:110px 1fr;gap:10px}
+@media (max-width:600px){.eform{grid-template-columns:1fr}.eprev{display:none}.mres .hit{grid-template-columns:56px 1fr}.mres .hit img,.mres .hit .noimg{width:56px;height:75px}.mres .hit button{grid-column:1/-1}}
 </style>
 </head>
 <body>
@@ -347,6 +385,36 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
     <button class="sm ghost" id="fwFind">Find more</button>
     <button class="sm" id="fwRemoveAll" style="margin-left:auto;background:var(--bad);border-color:var(--bad)">Remove all</button>
   </div>
+</dialog>
+<!-- admin: per-game menu + dialogs -->
+<div class="gmenu" id="gmenu" hidden role="menu"></div>
+<dialog id="mdlg" class="mdlg">
+  <div class="fwhead"><h3>Metadata lookup</h3><button class="ghost sm" id="mClose">Close</button></div>
+  <p class="help" id="mSub"></p>
+  <form class="row" id="mForm" style="margin:10px 0"><input type="search" id="mq" placeholder="Game title"><button>Search</button></form>
+  <div class="chips" id="mSug"></div>
+  <div class="mres" id="mRes"></div>
+  <p class="help" id="mFoot"></p>
+</dialog>
+<dialog id="edlg" class="mdlg">
+  <div class="fwhead"><h3>Edit details</h3><button class="ghost sm" id="eClose">Close</button></div>
+  <form id="eForm" class="eform">
+    <div class="eprev"><img id="eCover" alt=""></div>
+    <div class="efields">
+      <label>Title<input id="eName" required maxlength="300"></label>
+      <div class="erow"><label>Year<input id="eYear" inputmode="numeric" pattern="\d{4}" placeholder="e.g. 2006"></label>
+        <label>Genres<input id="eGenres" placeholder="Adventure, Action"></label></div>
+      <label>Cover image URL<input id="eUrl" type="url" placeholder="https://…"></label>
+      <label>Description<textarea id="eSummary" rows="6"></textarea></label>
+    </div>
+    <div class="btns"><button type="button" class="ghost" id="eCancel">Cancel</button><button id="eSave">Save</button></div>
+  </form>
+</dialog>
+<dialog id="rdlg">
+  <h3 id="rTitle"></h3>
+  <p>The game's file is deleted from the library and RomM. This can't be undone.</p>
+  <label id="rTorWrap" hidden><input type="checkbox" id="rTor"> <span id="rTorTxt"></span></label>
+  <div class="btns"><button class="ghost" id="rNo">Cancel</button><button id="rYes" style="background:var(--bad);border-color:var(--bad)">Remove</button></div>
 </dialog>
 <dialog id="cdlg">
   <h3 id="cTitle"></h3>
@@ -747,7 +815,7 @@ async function refreshActivity() {
     <p class="help">Peers: connected now, with how many exist in the swarm in brackets.</p>`;
 }
 let LIB = [], CFG = {romm: '', linked: false}, libPlat = '';
-api('api/config').then(c => { CFG = c; if (c.romm) $('#rommLink').href = c.romm; else $('#rommLink').hidden = true; }).catch(() => {});
+api('api/config').then(c => { CFG = c; if (c.admin && LIB.length) renderLib(); if (c.romm) $('#rommLink').href = c.romm; else $('#rommLink').hidden = true; }).catch(() => {});
 const logo = slug => `api/logo/${slug}`;
 const logoImg = (p, cls) => `<img src="${logo(p.slug)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;fallback&quot;>${esc(p.label)}</div>'">`;
 const rommRom = (g, play) => `${CFG.romm}/rom/${g.romm_id}${play ? '/ejs' : ''}`;
@@ -842,8 +910,9 @@ function gameTile(g, showPlat) {
   const cover = g.cover
     ? `<img class="blur" src="${esc(g.cover)}" alt="" loading="lazy" aria-hidden="true"><img class="art" src="${esc(g.cover)}" alt="" loading="lazy" onerror="this.previousElementSibling.remove();this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',innerHTML:'<b>${esc(t).replace(/'/g, '&#39;')}</b>'}))">`
     : `<div class="ph"><img src="${logo(p.slug)}" alt="" onerror="this.remove()"><b>${esc(t)}</b></div>`;
+  const kebab = CFG.admin ? `<button class="kebab" data-gk="${esc(gkey(g))}" aria-label="Manage ${esc(t)}" aria-haspopup="menu" title="Manage game">⋮</button>` : '';
   return `<div class="game" title="${esc(g.summary || t)}">
-    <div class="cover">${cover}${showPlat ? `<span class="badge">${esc(p.label)}</span>` : ''}</div>
+    <div class="cover">${kebab}${cover}${showPlat ? `<span class="badge">${esc(p.label)}</span>` : ''}</div>
     <div class="info"><b>${esc(t)}</b>${meta ? `<span>${esc(meta)}</span>` : ''}
       <div class="foot"><span class="sz">${size(g.size)}</span>${act}</div></div>
   </div>`;
@@ -859,6 +928,150 @@ const setHdr = () => document.documentElement.style.setProperty('--hdr', documen
 addEventListener('resize', setHdr); setHdr();
 $('#setup').onclick = e => { const b = e.target.closest('[data-bios]'); if (b) openBios(b.dataset.bios); };
 $('#lq').oninput = renderLib; $('#lsort').onchange = renderLib;
+
+/* ---------------- admin: per-game menu ---------------- */
+const gkey = g => g.platform + '/' + g.name;
+const gfind = k => LIB.find(g => gkey(g) === k);
+let menuFor = null;
+function closeMenu() { const m = $('#gmenu'); m.hidden = true; menuFor?.setAttribute('aria-expanded', 'false'); menuFor = null; }
+function openMenu(btn) {
+  const g = gfind(btn.dataset.gk); if (!g) return;
+  if (menuFor === btn) return closeMenu();
+  closeMenu(); menuFor = btn; btn.setAttribute('aria-expanded', 'true');
+  const p = P(g.platform), scanned = !!g.romm_id, wait = scanned ? '' : ' dis" title="RomM hasn’t scanned this game yet';
+  const m = $('#gmenu');
+  m.innerHTML = `
+    <button class="mi${wait}" data-act="lookup"><span class="ico">🔎</span>Metadata lookup…</button>
+    <button class="mi${wait}" data-act="edit"><span class="ico">✎</span>Edit details…</button>
+    ${scanned && g.identified ? '<button class="mi" data-act="unmatch"><span class="ico">⟲</span>Clear metadata</button>' : ''}
+    ${scanned ? `<a class="mi" href="${rommRom(g)}" target="_blank" rel="noopener"><span class="ico">↗</span>Open in RomM</a>` : ''}
+    <hr><button class="mi danger" data-act="remove"><span class="ico">🗑</span>Remove game…</button>`;
+  m.dataset.gk = btn.dataset.gk; m.hidden = false;
+  const r = btn.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+  let left = r.right + scrollX - w, top = r.bottom + scrollY + 4;
+  if (left < 8) left = 8;
+  if (r.bottom + h + 8 > innerHeight && r.top - h - 4 > 0) top = r.top + scrollY - h - 4;
+  m.style.left = left + 'px'; m.style.top = top + 'px';
+  m.querySelector('button:not(.dis),a')?.focus();
+}
+document.addEventListener('click', e => {
+  const k = e.target.closest('.kebab');
+  if (k) { e.preventDefault(); e.stopPropagation(); return openMenu(k); }
+  const mi = e.target.closest('#gmenu .mi');
+  if (mi) { const g = gfind($('#gmenu').dataset.gk); const act = mi.dataset.act; closeMenu(); if (g && act) gameAction(act, g); return; }
+  if (!e.target.closest('#gmenu')) closeMenu();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#gmenu').hidden) { const b = menuFor; closeMenu(); b?.focus(); e.stopImmediatePropagation(); } }, true);
+addEventListener('resize', closeMenu);
+
+async function reloadLib() { try { LIB = await api('api/library'); renderLib(); } catch (e) {} }
+
+function gameAction(act, g) {
+  if (act === 'lookup') return openLookup(g);
+  if (act === 'edit') return openEdit(g);
+  if (act === 'remove') return openRemove(g);
+  if (act === 'unmatch') return confirmBox(`Clear metadata for ${cleanTitle(g)}?`,
+      'RomM forgets the match, cover and description. You can run a Metadata lookup again after.', 'Clear')
+    .then(async ok => { if (!ok) return;
+      try { await api('api/game/unmatch', {rom_id: g.romm_id}); toast('Metadata cleared', 'good'); reloadLib(); }
+      catch (e) { toast(e.message, 'bad'); } });
+}
+
+/* lookup */
+let mGame = null;
+async function openLookup(g, q) {
+  mGame = g;
+  $('#mSub').textContent = `${P(g.platform).label} · file: ${g.fs_name || g.name}`;
+  $('#mRes').innerHTML = '<div class="none">Searching…</div>'; $('#mSug').innerHTML = ''; $('#mFoot').textContent = '';
+  if (!$('#mdlg').open) $('#mdlg').showModal();
+  if (q !== undefined) $('#mq').value = q;
+  let d;
+  try {
+    d = await api('api/game/meta?' + new URLSearchParams({platform: g.platform, name: g.name, rom_id: g.romm_id || '', q: q || ''}));
+  } catch (e) { $('#mRes').innerHTML = `<div class="none">${esc(e.message)}</div>`; return; }
+  if (mGame !== g) return;
+  $('#mq').value = d.term;
+  if (d.disc_id) $('#mSub').innerHTML += ` · <span style="color:var(--accent)">disc ID ${esc(d.disc_id.id)} = ${esc(d.disc_id.title)}</span>`;
+  $('#mSug').innerHTML = d.suggestions.length ? '<span class="lbl">Try:</span>' + d.suggestions.map(x => `<button type="button" data-q="${esc(x)}">${esc(x)}</button>`).join('') : '';
+  const cur = (g.title || '').toLowerCase();
+  $('#mRes').innerHTML = d.results.length ? d.results.map((r, i) => `
+    <div class="hit${r.name.toLowerCase() === cur && g.identified ? ' cur' : ''}">
+      ${r.cover ? `<img src="${esc(r.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<div class=noimg></div>'">` : '<div class="noimg"></div>'}
+      <div><b>${esc(r.name)}${r.year ? ` <span style="color:var(--muted);font-weight:400">(${r.year})</span>` : ''}</b>
+        <div class="src">${r.source.split(' + ').map(s => `<span class="${['GameTDB','Libretro'].includes(s) ? '' : 'rich'}">${esc(s)}</span>`).join('')}</div>
+        <p>${esc(r.summary || 'No description from this source.')}</p></div>
+      <button data-hit="${i}">Use this</button>
+    </div>`).join('')
+    : `<div class="none">${d.error ? esc(d.error) : `No matches for “${esc(d.term)}”. Try a shorter or full official title${d.suggestions.length ? ', or one of the suggestions above' : ''}.`}</div>`;
+  $('#mRes')._hits = d.results;
+  $('#mFoot').textContent = `Searched: ${d.tried.join(' · ')} — sources: ${[...new Set([...(d.disc_id ? ['GameTDB'] : []), ...d.providers.filter(p => !['Hltb','Hasheous','Playmatch'].includes(p))])].join(', ') || 'none'}. Add ScreenScraper or IGDB keys in RomM for more results.`;
+}
+$('#mForm').onsubmit = e => { e.preventDefault(); if (mGame) openLookup(mGame, $('#mq').value.trim()); };
+$('#mSug').onclick = e => { const b = e.target.closest('[data-q]'); if (b && mGame) openLookup(mGame, b.dataset.q); };
+$('#mClose').onclick = () => $('#mdlg').close();
+$('#mdlg').addEventListener('close', () => { mGame = null; });
+$('#mRes').onclick = async e => {
+  const b = e.target.closest('[data-hit]'); if (!b || !mGame) return;
+  const r = $('#mRes')._hits[+b.dataset.hit], g = mGame;
+  b.disabled = true; b.textContent = 'Applying…';
+  try {
+    await api('api/game/apply', {rom_id: g.romm_id, match: r});
+    toast(`${r.name}: metadata updated`, 'good'); $('#mdlg').close(); reloadLib();
+  } catch (err) { toast(err.message, 'bad'); b.disabled = false; b.textContent = 'Use this'; }
+};
+
+/* manual edit */
+let eGame = null;
+function openEdit(g) {
+  eGame = g;
+  $('#eName').value = g.title || cleanTitle(g);
+  $('#eYear').value = g.year || '';
+  $('#eGenres').value = (g.genres || []).join(', ');
+  $('#eUrl').value = '';
+  $('#eSummary').value = g.summary || '';
+  $('#eCover').src = g.cover || logo(g.platform);
+  $('#edlg').showModal(); $('#eName').focus();
+}
+$('#eUrl').oninput = () => { const u = $('#eUrl').value.trim(); $('#eCover').src = /^https?:\/\//.test(u) ? u : (eGame?.cover || ''); };
+$('#eClose').onclick = $('#eCancel').onclick = () => $('#edlg').close();
+$('#eForm').onsubmit = async e => {
+  e.preventDefault(); const g = eGame; if (!g) return;
+  const body = {rom_id: g.romm_id, name: $('#eName').value.trim(), summary: $('#eSummary').value.trim()};
+  const y = $('#eYear').value.trim(), gen = $('#eGenres').value.trim(), url = $('#eUrl').value.trim();
+  if (y && String(y) !== String(g.year || '')) body.year = y;
+  if (gen !== (g.genres || []).join(', ')) body.genres = gen;
+  if (url) body.url_cover = url;
+  $('#eSave').disabled = true;
+  try { await api('api/game/edit', body); toast('Details saved', 'good'); $('#edlg').close(); reloadLib(); }
+  catch (err) { toast(err.message, 'bad'); }
+  finally { $('#eSave').disabled = false; }
+};
+
+/* remove */
+let rGame = null;
+async function openRemove(g) {
+  rGame = g;
+  $('#rTitle').textContent = `Remove ${cleanTitle(g)}?`;
+  $('#rTorWrap').hidden = true; $('#rTor').checked = false;
+  $('#rdlg').showModal();
+  try {
+    const ts = await api('api/game/torrents?' + new URLSearchParams({platform: g.platform, name: g.name}));
+    if (ts.length && rGame === g) {
+      $('#rTorTxt').textContent = `Also delete the torrent and its download (${ts.length === 1 ? ts[0].name : ts.length + ' torrents'}). Stops seeding and frees the space.`;
+      $('#rTorWrap').hidden = false; $('#rTor').checked = true;
+    }
+  } catch (e) {}
+}
+$('#rNo').onclick = () => $('#rdlg').close();
+$('#rYes').onclick = async () => {
+  const g = rGame; if (!g) return;
+  $('#rYes').disabled = true;
+  try {
+    const r = await api('api/game/remove', {platform: g.platform, name: g.name, rom_id: g.romm_id, delete_torrent: $('#rTor').checked && !$('#rTorWrap').hidden});
+    toast(`${cleanTitle(g)} removed${r.torrents ? ' (torrent deleted too)' : ''}`, 'good'); $('#rdlg').close(); reloadLib();
+  } catch (e) { toast(e.message, 'bad'); }
+  finally { $('#rYes').disabled = false; }
+};
 
 /* ---------------- start ---------------- */
 loadPlatforms().then(() => show(location.hash.slice(1)));
