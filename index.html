@@ -221,7 +221,7 @@ async function loadPlatforms() {
   $('#mine').innerHTML = mine.length ? `<div class="cards">${mine.map(p => `
     <div class="card">
       <div class="h"><b>${esc(p.label)}</b><span class="sub">${p.games} game${p.games === 1 ? '' : 's'}</span></div>
-      <div class="tags">${p.bios ? biosNeed(p) : '<span class="pill">No BIOS needed</span>'}${p.browser ? '' : '<span class="pill">download only</span>'}</div>
+      <div class="tags">${p.bios ? biosNeed(p) : '<span class="pill">No BIOS needed</span>'}${p.browser ? '<span class="pill good" title="Plays right in the browser in RomM">▶ RomM compatible</span>' : '<span class="pill" title="RomM stores these; play them in an emulator on your own device">download only</span>'}</div>
       ${p.bios_files ? `<div class="files">${p.bios_names.map(esc).join(', ')}</div>` : ''}
       ${p.bios_note ? `<div class="sub">${esc(p.bios_note)}</div>` : ''}
       ${p.bios_official ? `<div><a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a></div>`
@@ -231,7 +231,7 @@ async function loadPlatforms() {
   $('#avail').innerHTML = avail.map(p => `
     <div class="card add" data-add="${p.slug}">
       <div class="h"><b>${esc(p.label)}</b><span class="sub">+ Add</span></div>
-      <div class="tags">${p.bios ? `<span class="pill ${p.bios === 'required' ? 'need' : 'soft'}">BIOS ${esc(p.bios)}</span>` : '<span class="pill">No BIOS needed</span>'}${p.browser ? '' : '<span class="pill">download only</span>'}</div>
+      <div class="tags">${p.bios ? `<span class="pill ${p.bios === 'required' ? 'need' : 'soft'}">BIOS ${esc(p.bios)}</span>` : '<span class="pill">No BIOS needed</span>'}${p.browser ? '<span class="pill good" title="Plays right in the browser in RomM">▶ RomM compatible</span>' : '<span class="pill" title="RomM stores these; play them in an emulator on your own device">download only</span>'}</div>
       ${p.bios_note ? `<div class="sub">${esc(p.bios_note)}</div>` : ''}
     </div>`).join('');
   // refresh platform dropdowns in game results, keeping choices
