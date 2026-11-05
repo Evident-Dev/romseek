@@ -123,7 +123,15 @@ BIOS_QUERY = {
     "xbox": "xbox bios mcpx",
 }
 # Firmware RomM wants as the zip itself (e.g. neogeo.zip), never extracted.
-KEEP_ZIP = {"neogeoaes", "neogeomvs", "arcade"}
+KEEP_ZIP = {"neogeoaes", "neogeomvs", "arcade",
+            "switch"}  # Switch emulators install firmware from the zip itself
+# A BIOS zip is only unpacked when it is small; anything bigger is a firmware
+# pack/collection and is kept as the archive (hardlinked: no extra disk space).
+EXTRACT_MAX_MEMBERS = 64
+EXTRACT_MAX_BYTES = 512 * 1024 * 1024
+# A torrent with this many archives is a collection (e.g. one zip per firmware
+# version): keep every archive whole instead of merging their contents.
+PACK_MIN_ARCHIVES = 3
 # Platforms EmulatorJS can play in the browser; the rest are library/download-only.
 BROWSER = {"nes", "snes", "n64", "gb", "gbc", "gba", "nds", "genesis", "sms",
            "gamegear", "segacd", "sega32", "saturn", "psx", "psp", "atari2600",
@@ -288,6 +296,27 @@ def platform_exists(slug):
     return os.path.isdir(os.path.join(LIBRARY, slug))
 
 
+def bios_entries(slug):
+    """Top-level firmware entries with sizes, for the Manage BIOS popup."""
+    d = os.path.join(FIRMWARE, slug)
+    out = []
+    for name in bios_files(slug):
+        p = os.path.join(d, name)
+        try:
+            if os.path.isdir(p):
+                size = sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(p) for f in fs)
+                out.append({"name": name, "size": size, "dir": True})
+            else:
+                out.append({"name": name, "size": os.path.getsize(p), "dir": False})
+        except OSError:
+            continue
+    return out
+
+
+def bios_size(slug):
+    return sum(e["size"] for e in bios_entries(slug))
+
+
 def bios_files(slug):
     d = os.path.join(FIRMWARE, slug)
     try:
@@ -300,7 +329,7 @@ def platform_info(slug):
     return {
         "slug": slug, "label": LABEL[slug], "exists": platform_exists(slug),
         "bios": BIOS.get(slug, ""), "bios_files": len(bios_files(slug)),
-        "bios_names": bios_files(slug)[:50],
+        "bios_size": bios_size(slug),
         "games": game_count(slug),
         "emulators": [{"name": n, "url": u} for n, u in EMULATORS.get(slug, [])],
         "romm_id": romm_index()["platforms"].get(slug),
@@ -514,42 +543,57 @@ def set_status(h, state, detail=""):
 
 
 def import_bios(wanted, slug):
-    """Firmware goes flat into library/bios/<slug>/. Zip packs are unpacked
-    (basenames only, so no path traversal) unless RomM wants the zip itself."""
+    """Firmware goes into library/bios/<slug>/.
+
+    - Small BIOS zips (<= EXTRACT_MAX_MEMBERS files, <= EXTRACT_MAX_BYTES) are
+      unpacked by basename only (no path traversal), executables skipped.
+    - Packs (>= PACK_MIN_ARCHIVES archives), big zips and KEEP_ZIP platforms are
+      kept whole and hardlinked, so a pack of many firmware zips stays as
+      separate, installable zips and uses no extra disk space.
+    """
     import zipfile
     dest = os.path.join(FIRMWARE, slug)
     os.makedirs(dest, exist_ok=True)
-    n, notes = 0, []
+    archives = [p for _, p in wanted if os.path.splitext(p)[1].lower() in (".zip", ".7z", ".rar")]
+    is_pack = len(archives) >= PACK_MIN_ARCHIVES
+    n, kept, notes = 0, 0, []
     for name, p in wanted:
         ext = os.path.splitext(p)[1].lower()
-        if ext == ".zip" and slug not in KEEP_ZIP:
+        extract = ext == ".zip" and slug not in KEEP_ZIP and not is_pack
+        if extract:
             try:
                 with zipfile.ZipFile(p) as z:
-                    for m in z.infolist():
-                        base = safe_name(os.path.basename(m.filename))
-                        if m.is_dir() or not base or base.startswith(".") \
-                                or os.path.splitext(base)[1].lower() in JUNK_EXT:
-                            continue
-                        if m.file_size > 512 * 1024 * 1024:
-                            notes.append(f"skipped oversized {base}")
-                            continue
-                        out = os.path.join(dest, base)
-                        if os.path.exists(out):
-                            continue
-                        data = z.read(m)
-                        if data[:2] == b"MZ":
-                            notes.append(f"skipped executable {base}")
-                            continue
-                        with open(out, "wb") as fh:
-                            fh.write(data)
-                        n += 1
+                    members = [m for m in z.infolist() if not m.is_dir()]
+                    if len(members) > EXTRACT_MAX_MEMBERS or sum(m.file_size for m in members) > EXTRACT_MAX_BYTES:
+                        extract = False
+                    else:
+                        for m in members:
+                            base = safe_name(os.path.basename(m.filename))
+                            if not base or base.startswith(".") or os.path.splitext(base)[1].lower() in JUNK_EXT:
+                                continue
+                            out = os.path.join(dest, base)
+                            if os.path.exists(out):
+                                continue
+                            data = z.read(m)
+                            if data[:2] == b"MZ":
+                                notes.append(f"skipped executable {base}")
+                                continue
+                            with open(out, "wb") as fh:
+                                fh.write(data)
+                            n += 1
             except zipfile.BadZipFile:
                 notes.append(f"bad zip {os.path.basename(p)}")
-        else:
-            if ext in (".7z", ".rar"):
+                continue
+        if not extract:
+            if ext in (".7z", ".rar") and not is_pack and slug not in KEEP_ZIP:
                 notes.append(f"{os.path.basename(p)} needs extracting by hand")
-            n += link(p, os.path.join(dest, safe_name(os.path.basename(p))))
-    detail = f"{n} firmware file(s) -> bios/{slug}" + (f" ({'; '.join(notes)})" if notes else "")
+            kept += link(p, os.path.join(dest, safe_name(os.path.basename(p))))
+    parts = []
+    if n:
+        parts.append(f"{n} file(s) unpacked")
+    if kept:
+        parts.append(f"{kept} archive(s) kept whole" if (is_pack or archives) else f"{kept} file(s)")
+    detail = (", ".join(parts) or "nothing new") + f" -> bios/{slug}" + (f" ({'; '.join(notes)})" if notes else "")
     return "imported", detail
 
 
@@ -738,11 +782,14 @@ def upload_firmware(slug, filename, length, stream, offset=0, total=None, upload
 def delete_firmware(slug, filename):
     if slug not in SLUGS:
         raise ValueError("unknown platform")
-    name = os.path.basename(filename)
-    if not name or name.startswith(".") or name not in bios_files(slug):
-        raise ValueError("no such firmware file")
-    os.remove(os.path.join(FIRMWARE, slug, name))
-    log("firmware removed", slug, name)
+    import shutil
+    names = bios_files(slug) if filename == "*" else [os.path.basename(filename)]
+    for name in names:
+        if not name or name.startswith(".") or name not in bios_files(slug):
+            raise ValueError("no such firmware file")
+        p = os.path.join(FIRMWARE, slug, name)
+        shutil.rmtree(p) if os.path.isdir(p) and not os.path.islink(p) else os.remove(p)
+    log("firmware removed", slug, "ALL" if filename == "*" else names[0], f"({len(names)} entries)")
     return platform_info(slug)
 
 
@@ -779,6 +826,11 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, search(q, any_category=(qs.get("kind") or [""])[0] == "bios"))
             if u.path == "/api/platforms":
                 return self.send(200, platforms())
+            if u.path == "/api/firmware":
+                slug = (qs.get("platform") or [""])[0]
+                if slug not in SLUGS:
+                    return self.send(400, {"error": "unknown platform"})
+                return self.send(200, bios_entries(slug))
             if u.path == "/api/img":
                 try:
                     data, ctype = romm_asset((qs.get("p") or [""])[0])

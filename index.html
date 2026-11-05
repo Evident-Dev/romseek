@@ -58,6 +58,16 @@ td.a select{padding:6px 8px;max-width:190px}
 .card.add:hover{border-color:var(--accent)}
 .files{color:var(--muted);font-size:12px;word-break:break-all;display:flex;flex-direction:column;gap:3px}
 .fw{display:flex;justify-content:space-between;gap:8px}.fw a{color:var(--bad);white-space:nowrap}
+.fwsum{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:13px}
+.fwdlg{max-width:640px;width:calc(100% - 32px)}
+.fwhead{display:flex;justify-content:space-between;align-items:center;gap:10px}.fwhead h3{margin:0}
+.fwlist{max-height:min(55vh,520px);overflow:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-2,#0f1218)}
+.fwrow{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.fwrow:last-child{border-bottom:0}
+.fwrow .nm{flex:1;min-width:0;word-break:break-all;color:var(--text)}
+.fwrow .sz{color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.fwrow a{color:var(--bad);white-space:nowrap;font-size:12px}
+.fwfoot{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .panel{background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:14px;margin-top:10px}
 .panel .h{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
 .stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
@@ -301,6 +311,17 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
 
 <div class="toasts" id="toasts"></div>
 <input type="file" id="fwFile" hidden>
+<dialog id="fwdlg" class="fwdlg">
+  <div class="fwhead"><h3 id="fwTitle"></h3><button class="ghost sm" id="fwClose">Close</button></div>
+  <p class="help" id="fwSub"></p>
+  <div class="row" style="margin:10px 0"><input type="search" id="fwq" placeholder="Filter files"></div>
+  <div class="fwlist" id="fwList"></div>
+  <div class="fwfoot">
+    <button class="sm ghost" id="fwUpload">Upload more</button>
+    <button class="sm ghost" id="fwFind">Find more</button>
+    <button class="sm" id="fwRemoveAll" style="margin-left:auto;background:var(--bad);border-color:var(--bad)">Remove all</button>
+  </div>
+</dialog>
 <dialog id="cdlg">
   <h3 id="cTitle"></h3>
   <p id="cBody"></p>
@@ -388,7 +409,8 @@ async function loadPlatforms() {
     <div class="card">
       <div class="h"><b>${esc(p.label)}</b><span class="sub">${p.games} game${p.games === 1 ? '' : 's'}</span></div>
       <div class="tags">${p.bios ? biosNeed(p) : '<span class="pill">No BIOS needed</span>'}${p.browser ? '<span class="pill good" title="Plays right in the browser in RomM">▶ RomM compatible</span>' : '<span class="pill" title="RomM stores these; play them in an emulator on your own device">download only</span>'}</div>
-      ${p.bios_files ? `<div class="files">${p.bios_names.map(n => `<div class="fw"><span>${esc(n)}</span><a href="#" data-rmfw="${p.slug}" data-file="${esc(n)}">Remove</a></div>`).join('')}</div>` : ''}
+      ${p.bios_files ? `<div class="fwsum"><span>${p.bios_files} file${p.bios_files === 1 ? '' : 's'} · ${size(p.bios_size)}</span>
+        <button class="sm ghost" data-managefw="${p.slug}">Manage BIOS files</button></div>` : ''}
       ${p.bios_note ? `<div class="sub">${esc(p.bios_note)}</div>` : ''}
       ${p.bios && !p.bios_files ? `<div class="row">${p.bios_official
           ? `<a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a>`
@@ -471,10 +493,47 @@ document.addEventListener('click', async e => {
   const t = e.target.closest('[data-rmfw]'); if (!t) return;
   e.preventDefault();
   const slug = t.dataset.rmfw, file = t.dataset.file, label = P(slug).label;
-  if (!await confirmBox(`Remove ${file}?`, `This deletes it from RomM's ${label} firmware folder. You can download or upload it again afterwards.`, 'Remove')) return;
-  try { await api('api/firmware/delete', {platform: slug, file}); toast(`${file} removed`, 'good'); loadPlatforms(); }
+  const reopen = $('#fwdlg').open; if (reopen) $('#fwdlg').close();
+  if (!await confirmBox(`Remove ${file}?`, `This deletes it from RomM's ${label} firmware folder. You can download or upload it again afterwards.`, 'Remove')) { if (reopen) openFw(slug); return; }
+  try { await api('api/firmware/delete', {platform: slug, file}); toast(`${file} removed`, 'good'); await loadPlatforms(); if (libPlat) renderLib(); if (fwSlug === slug) openFw(slug); }
   catch (err) { toast('Could not remove: ' + err.message, 'bad'); }
 });
+
+/* ---------------- manage BIOS popup ---------------- */
+let fwSlug = null, FW = [];
+async function openFw(slug) {
+  fwSlug = slug; const p = P(slug);
+  $('#fwTitle').textContent = `${p.label} BIOS files`;
+  $('#fwq').value = ''; $('#fwList').innerHTML = '<div class="msg" style="padding:12px">Loading…</div>';
+  $('#fwFind').hidden = !!p.bios_official;
+  if (!$('#fwdlg').open) $('#fwdlg').showModal();
+  try { FW = await api('api/firmware?platform=' + encodeURIComponent(slug)); } catch (e) { FW = []; toast('Could not list files: ' + e.message, 'bad'); }
+  renderFw();
+}
+function renderFw() {
+  const f = $('#fwq').value.trim().toLowerCase();
+  const rows = FW.filter(x => !f || x.name.toLowerCase().includes(f));
+  $('#fwSub').textContent = `${FW.length} file${FW.length === 1 ? '' : 's'} · ${size(FW.reduce((a, x) => a + x.size, 0))} in RomM's ${P(fwSlug).label} firmware folder` + (f ? ` · ${rows.length} shown` : '');
+  $('#fwList').innerHTML = !FW.length ? '<div class="msg" style="padding:12px">No firmware files.</div>'
+    : !rows.length ? '<div class="msg" style="padding:12px">No files match.</div>'
+    : rows.slice(0, 500).map(x => `<div class="fwrow"><span class="nm">${x.dir ? '📁 ' : ''}${esc(x.name)}</span><span class="sz">${size(x.size)}</span>
+        <a href="#" data-rmfw="${fwSlug}" data-file="${esc(x.name)}">Remove</a></div>`).join('')
+      + (rows.length > 500 ? `<div class="msg" style="padding:12px">…and ${rows.length - 500} more. Use the filter to find a file.</div>` : '');
+}
+$('#fwq').oninput = renderFw;
+$('#fwClose').onclick = () => $('#fwdlg').close();
+$('#fwUpload').onclick = () => { upSlug = fwSlug; $('#fwFile').value = ''; $('#fwFile').click(); };
+$('#fwFind').onclick = () => { $('#fwdlg').close(); openBios(fwSlug); };
+$('#fwRemoveAll').onclick = async () => {
+  const label = P(fwSlug).label;
+  $('#fwdlg').close();
+  if (await confirmBox(`Remove all ${label} BIOS files?`, `This deletes all ${FW.length} files from RomM's ${label} firmware folder. You can download or upload them again afterwards.`, 'Remove all')) {
+    try { await api('api/firmware/delete', {platform: fwSlug, file: '*'}); toast(`All ${label} BIOS files removed`, 'good'); await loadPlatforms(); if (libPlat) renderLib(); return; }
+    catch (err) { toast('Could not remove: ' + err.message, 'bad'); }
+  }
+  openFw(fwSlug);
+};
+document.addEventListener('click', e => { const b = e.target.closest('[data-managefw]'); if (b) { e.preventDefault(); openFw(b.dataset.managefw); } });
 
 /* ---------------- firmware upload ---------------- */
 let upSlug = null;
@@ -504,7 +563,7 @@ $('#fwFile').onchange = async () => {
     for (let off = 0; off < f.size; off += CHUNK) await sendChunk(off, f.slice(off, off + CHUNK));
     t.remove(); toast(`${f.name} added to ${label} firmware`, 'good');
     if (biosSlug === slug) { $('#biosPanel').hidden = true; biosSlug = null; }
-    loadPlatforms();
+    await loadPlatforms(); if (libPlat) renderLib(); if (fwSlug === slug) openFw(slug);
   } catch (err) { t.remove(); toast('Upload failed: ' + err.message, 'bad'); }
 };
 
@@ -668,7 +727,8 @@ function setupBoxes(p) {
     boxes.push(`<div class="box"><h4>BIOS / firmware</h4>
       <div class="row">${have ? '<span class="pill good">Installed ✓</span>' : `<span class="pill ${p.bios === 'required' ? 'need' : 'soft'}">${esc(p.bios)}</span>`}</div>
       <p>${esc(p.bios_note || '')}</p>
-      ${have ? `<div class="files">${p.bios_names.map(esc).join('<br>')}</div>
+      ${have ? `<div class="fwsum"><span>${p.bios_files} file${p.bios_files === 1 ? '' : 's'} · ${size(p.bios_size)}</span>
+                 <button class="sm ghost" data-managefw="${p.slug}">Manage BIOS files</button></div>
                  ${p.romm_id ? `<div class="row"><a class="btn ghost" href="${rommPlat(p)}" target="_blank" rel="noopener">Download from RomM ↗</a></div>` : ''}`
              : `<div class="row">${p.bios_official ? `<a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a>`
                                                   : `<button class="sm" data-bios="${p.slug}">Find BIOS</button>`}
