@@ -463,7 +463,7 @@ def search(query, any_category=False):
                 "age": x.get("age"), "info": x.get("infoUrl") or "",
                 "platform": plat,
             })
-    suggest_from_siblings(out)
+    detect(out)
     # ROM-specific indexer first, then anything we could place on a platform
     # (generic-"Console" hits are usually miscategorised PC releases), then seeds.
     out.sort(key=lambda r: (r["indexer"] != "BlueRoms", not r["platform"], -r["seeders"]))
@@ -518,7 +518,7 @@ def suggest_from_siblings(results):
                 r["suggested"] = best[0]
 
 
-def grab(rid, slug, kind="rom"):
+def grab(rid, slug, kind="rom", learn=False):
     if slug not in SLUGS:
         raise ValueError("pick a platform")
     if kind not in ("rom", "bios"):
@@ -532,41 +532,326 @@ def grab(rid, slug, kind="rom"):
     if kind == "bios":
         add_platform(slug)
     fields = {"category": CATEGORY, "tags": f"romseek,{kind}:{slug}", "savepath": SAVE_PATH}
-    # Prowlarr puts the link in different fields per indexer: a real magnet in
-    # magnetUrl or guid, or a Prowlarr proxy URL in magnetUrl/downloadUrl that
-    # answers with a .torrent body or a redirect to a magnet.
+    kind_, link_ = resolve_link(x)
+    if kind_ == "torrent":
+        qbit("torrents/add", fields, files={"torrents": ("rom.torrent", link_)})
+    else:
+        fields["urls"] = link_
+        qbit("torrents/add", fields)
+    log(f"grabbed ({kind_})", kind, slug, x.get("title"))
+    if learn and kind == "rom":
+        remember_choice(x.get("title", ""), slug)
+
+
+def resolve_link(x):
+    """("torrent", bytes) or ("magnet", str) for a Prowlarr result.
+
+    Prowlarr puts the link in different fields per indexer: a real magnet in
+    magnetUrl or guid, or a Prowlarr proxy URL in magnetUrl/downloadUrl that
+    answers with a .torrent body or a redirect to a magnet."""
     magnet = next((v for v in (x.get("magnetUrl"), x.get("guid")) if (v or "").startswith("magnet:")), "")
-    if not magnet:
-        proxies = [v for v in (x.get("downloadUrl"), x.get("magnetUrl")) if (v or "").startswith("http")]
-        last_err = None
-        for url in proxies:
-            # Prowlarr builds proxy links as http://localhost:9696/... — point at its container.
-            dl = re.sub(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?", PROWLARR_URL, url)
+    if magnet:
+        return "magnet", magnet
+    last_err = None
+    for url in [v for v in (x.get("downloadUrl"), x.get("magnetUrl")) if (v or "").startswith("http")]:
+        # Prowlarr builds proxy links as http://localhost:9696/... — point at its container.
+        dl = re.sub(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?", PROWLARR_URL, url)
+        try:
+            content = http(dl, follow=False, timeout=60).read()
+        except urllib.error.HTTPError as e:
+            loc = e.headers.get("Location", "")
+            if e.code in (301, 302, 303, 307, 308) and loc.startswith("magnet:"):
+                return "magnet", loc
+            last_err = ValueError(f"indexer refused the download (HTTP {e.code})")
+            continue
+        if content[:1] == b"d":
+            return "torrent", content
+        if content.startswith(b"magnet:"):
+            return "magnet", content.decode(errors="ignore").strip()
+        last_err = ValueError("indexer did not return a torrent or magnet")
+    if x.get("infoHash"):
+        # Last resort: bare info-hash magnet (DHT finds peers, just slower).
+        return "magnet", f"magnet:?xt=urn:btih:{x['infoHash']}&dn={urllib.parse.quote(x.get('title', ''))}"
+    raise last_err or ValueError("no usable download link")
+
+
+# ---------------------------------------------------------------- detection
+# (1) game-title database, (2) remembered choices, (3) file-list peek, (4) size checks.
+
+# (1) No-Intro / Redump title lists from libretro-database: which systems each
+# game came out on. Downloaded in the background, refreshed every 30 days.
+TITLE_DB_URL = os.environ.get("TITLE_DB_URL", "https://raw.githubusercontent.com/libretro/libretro-database/master/metadat")
+TITLE_DATS = {
+    "nes": ["no-intro/Nintendo - Nintendo Entertainment System"],
+    "snes": ["no-intro/Nintendo - Super Nintendo Entertainment System"],
+    "n64": ["no-intro/Nintendo - Nintendo 64"],
+    "gb": ["no-intro/Nintendo - Game Boy"], "gbc": ["no-intro/Nintendo - Game Boy Color"],
+    "gba": ["no-intro/Nintendo - Game Boy Advance"], "nds": ["no-intro/Nintendo - Nintendo DS"],
+    "3ds": ["no-intro/Nintendo - Nintendo 3DS", "no-intro/Nintendo - Nintendo 3DS (Digital)"],
+    "ngc": ["redump/Nintendo - GameCube"],
+    "wii": ["redump/Nintendo - Wii", "no-intro/Nintendo - Wii (Digital)"],
+    "wiiu": ["no-intro/Nintendo - Wii U (Digital)"],
+    "genesis": ["no-intro/Sega - Mega Drive - Genesis"], "sms": ["no-intro/Sega - Master System - Mark III"],
+    "gamegear": ["no-intro/Sega - Game Gear"], "sega32": ["no-intro/Sega - 32X"],
+    "segacd": ["redump/Sega - Mega-CD - Sega CD"], "saturn": ["redump/Sega - Saturn"],
+    "dc": ["redump/Sega - Dreamcast"], "psx": ["redump/Sony - PlayStation"],
+    "ps2": ["redump/Sony - PlayStation 2"], "ps3": ["redump/Sony - PlayStation 3", "no-intro/Sony - PlayStation 3 (PSN)"],
+    "psp": ["redump/Sony - PlayStation Portable", "no-intro/Sony - PlayStation Portable"],
+    "psvita": ["no-intro/Sony - PlayStation Vita", "no-intro/Sony - PlayStation Vita (PSN)"],
+    "xbox": ["redump/Microsoft - Xbox"], "atari2600": ["no-intro/Atari - 2600"],
+    "tg16": ["no-intro/NEC - PC Engine - TurboGrafx 16"],
+}
+TITLES_FILE = os.path.join(STATE_DIR, "titles.json")
+# Systems the lists don't cover (or only partly: Wii U is digital-only there).
+NO_TITLE_DB = (SLUGS - set(TITLE_DATS)) | {"wiiu"}
+_TITLES, _BY_FIRST, _TITLES_META = {}, {}, {"t": 0, "count": 0}
+
+
+_BY_WORD = {}
+
+
+def _index_titles(index):
+    _TITLES.clear(); _BY_FIRST.clear(); _BY_WORD.clear()
+    for k, plats in index.items():
+        _TITLES[k] = set(plats)
+        _BY_FIRST.setdefault(k.split()[0], []).append(k)
+        for w in set(k.split()):
+            _BY_WORD.setdefault(w, []).append(k)
+
+
+def load_titles():
+    try:
+        with open(TITLES_FILE) as f:
+            d = json.load(f)
+        _index_titles(d["index"]); _TITLES_META.update(t=d["t"], count=len(d["index"]))
+    except (OSError, ValueError, KeyError):
+        pass
+
+
+def refresh_titles(force=False):
+    if not force and _TITLES and time.time() - _TITLES_META["t"] < 30 * 86400:
+        return
+    index, ok = {}, 0
+    for slug, dats in TITLE_DATS.items():
+        for dat in dats:
+            url = f"{TITLE_DB_URL}/{urllib.parse.quote(dat)}.dat"
             try:
-                content = http(dl, follow=False, timeout=60).read()
-            except urllib.error.HTTPError as e:
-                loc = e.headers.get("Location", "")
-                if e.code in (301, 302, 303, 307, 308) and loc.startswith("magnet:"):
-                    magnet = loc
-                    break
-                last_err = ValueError(f"indexer refused the download (HTTP {e.code})")
+                text = http(url, headers={"User-Agent": "romseek"}, timeout=60).read().decode("utf-8", "replace")
+            except Exception as e:
+                log("title db: could not fetch", dat, repr(e)); continue
+            ok += 1
+            for name in re.findall(r'^\s*name "([^"]+)"', text, re.M)[1:]:   # [0] is the header
+                k = title_key(name)
+                if k:
+                    index.setdefault(k, set()).add(slug)
+    if not ok:
+        return
+    index = {k: sorted(v) for k, v in index.items()}
+    tmp = TITLES_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump({"t": int(time.time()), "index": index}, f)
+    os.replace(tmp, TITLES_FILE)
+    _index_titles(index); _TITLES_META.update(t=int(time.time()), count=len(index))
+    log(f"title db: {len(index)} titles from {ok} lists")
+
+
+def titles_loop():
+    while True:
+        try:
+            refresh_titles()
+        except Exception:
+            log("title db error:", traceback.format_exc().strip().splitlines()[-1])
+        time.sleep(86400)
+
+
+def _nums(words):
+    return {w for w in words if w.isdigit()}
+
+
+def db_platforms(title):
+    """Systems the game in this release name came out on ([] if not found).
+    Exact title first; else the longest known title whose words are all in the
+    release name (numbers must match exactly, so sequels don't collide)."""
+    k = title_key(title)
+    if not k or not _TITLES:
+        return []
+    if k in _TITLES:
+        return sorted(_TITLES[k])
+    words = k.split(); ws = set(words); n = _nums(words)
+    best, best_len = set(), 2
+    for first in ws:
+        for cand in _BY_FIRST.get(first, ()):
+            cw = cand.split()
+            # only close partial matches: a known title of 3+ words, with at most
+            # 2 leftover words (group tags etc.); "super mario party" must not
+            # match "mario party" or "super mario"
+            if len(cw) < best_len or len(cw) < 3 or len(ws) - len(set(cw)) > 2 \
+                    or not set(cw) <= ws or _nums(cw) != n:
                 continue
-            if content[:1] == b"d":
-                qbit("torrents/add", fields, files={"torrents": ("rom.torrent", content)})
-                log("grabbed (torrent)", kind, slug, x.get("title"))
-                return
-            if content.startswith(b"magnet:"):
-                magnet = content.decode(errors="ignore").strip()
-                break
-            last_err = ValueError("indexer did not return a torrent or magnet")
-        if not magnet and x.get("infoHash"):
-            # Last resort: bare info-hash magnet (DHT finds peers, just slower).
-            magnet = f"magnet:?xt=urn:btih:{x['infoHash']}&dn={urllib.parse.quote(x.get('title', ''))}"
-        if not magnet:
-            raise last_err or ValueError("no usable download link")
-    fields["urls"] = magnet
-    qbit("torrents/add", fields)
-    log("grabbed (magnet)", slug, x.get("title"))
+            if len(cw) > best_len:
+                best, best_len = set(), len(cw)
+            best |= _TITLES[cand]
+    if not best and len(ws) >= 3:
+        # release name dropped a word ("Zelda Ocarina of Time" vs "Legend of
+        # Zelda, The - Ocarina of Time"): known title = release words + 1 extra
+        rare = min(ws, key=lambda w: len(_BY_WORD.get(w, ())))
+        for cand in _BY_WORD.get(rare, ()):
+            cw = set(cand.split())
+            if ws <= cw and len(cw) - len(ws) <= 1 and _nums(cw) == n:
+                best |= _TITLES[cand]
+    return sorted(best)
+
+
+# (2) Platforms the user picked for titles RomSeek couldn't place.
+LEARNED_FILE = os.path.join(STATE_DIR, "learned.json")
+_LEARNED = {}
+
+
+def load_learned():
+    try:
+        with open(LEARNED_FILE) as f:
+            _LEARNED.update(json.load(f))
+    except (OSError, ValueError):
+        pass
+
+
+def remember_choice(title, slug):
+    k = title_key(title)
+    if not k or slug not in SLUGS:
+        return
+    with LOCK:
+        _LEARNED[k] = slug
+        tmp = LEARNED_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(_LEARNED, f)
+        os.replace(tmp, LEARNED_FILE)
+
+
+# (4) Size sanity. Generous upper bounds for ONE game (archives, multi-disc).
+MAX_GAME_MB = {"nes": 8, "snes": 16, "gb": 8, "gbc": 16, "gba": 64, "n64": 128, "sms": 8,
+               "gamegear": 8, "genesis": 16, "sega32": 16, "atari2600": 1, "tg16": 8,
+               "nds": 1024, "ngc": 1600, "segacd": 1500, "dc": 1600, "psx": 3500, "saturn": 3000,
+               "psp": 2500}
+PACK_RX = re.compile(r"\b(pack|collection|complete|romset|rom ?set|full ?set|all games|\d{2,}\s*(games|roms|in ?1)|anthology|library|bundle)\b", re.I)
+
+
+def size_ok(slug, size, title):
+    m = MAX_GAME_MB.get(slug)
+    return not m or not size or size <= m * 1024 * 1024 or bool(PACK_RX.search(title))
+
+
+def detect(results):
+    """Fill platform/suggestions for search results using all signals."""
+    for r in results:
+        title, size = r["title"], r["size"]
+        db = [p for p in db_platforms(title) if size_ok(p, size, title)]
+        r["candidates"], r["source"], r["suggested"], r["suggest_src"], r["size_warn"] = db, "", "", "", ""
+        if r["platform"]:
+            r["source"] = "title"
+        elif len(db) == 1:
+            r["platform"], r["source"] = db[0], "db"          # only ever released on one system
+        if r["platform"] and not size_ok(r["platform"], size, title):
+            r["size_warn"] = f"{size // (1024*1024)} MB is too big for one {LABEL[r['platform']]} game"
+    suggest_from_siblings(results)                             # sets r["suggested"]
+    for r in results:
+        if r["platform"]:
+            continue
+        cands = r["candidates"]
+        # the database can't rule out systems it doesn't cover (Switch, Wii U discs, ...)
+        ruled_out = cands and r["suggested"] not in cands and r["suggested"] not in NO_TITLE_DB
+        if r["suggested"] and (ruled_out or not size_ok(r["suggested"], r["size"], r["title"])):
+            r["suggested"] = ""                               # siblings disagree with the database/size
+        if r["suggested"]:
+            r["suggest_src"] = "matching results"
+        learned = _LEARNED.get(title_key(r["title"]))
+        if learned:
+            r["suggested"], r["suggest_src"] = learned, "your earlier choice"
+
+
+# (3) Peek at a result's file list (torrent metadata only, nothing downloaded).
+EXT_PLATFORM = {".nes": "nes", ".fds": "nes", ".sfc": "snes", ".smc": "snes", ".z64": "n64", ".n64": "n64",
+                ".v64": "n64", ".gb": "gb", ".gbc": "gbc", ".gba": "gba", ".nds": "nds", ".3ds": "3ds",
+                ".cia": "3ds", ".cci": "3ds", ".gcm": "ngc", ".gcz": "ngc", ".wbfs": "wii", ".wad": "wii",
+                ".wud": "wiiu", ".wux": "wiiu", ".rpx": "wiiu", ".nsp": "switch", ".xci": "switch",
+                ".nsz": "switch", ".cso": "psp", ".pbp": "psp", ".gdi": "dc", ".cdi": "dc", ".md": "genesis",
+                ".gen": "genesis", ".sms": "sms", ".gg": "gamegear", ".32x": "sega32", ".pce": "tg16",
+                ".a26": "atari2600", ".vpk": "psvita", ".xiso": "xbox"}
+
+
+def _bdecode(b, i=0):
+    c = b[i:i+1]
+    if c == b"i":
+        e = b.index(b"e", i); return int(b[i+1:e]), e + 1
+    if c == b"l":
+        i += 1; out = []
+        while b[i:i+1] != b"e":
+            v, i = _bdecode(b, i); out.append(v)
+        return out, i + 1
+    if c == b"d":
+        i += 1; out = {}
+        while b[i:i+1] != b"e":
+            k, i = _bdecode(b, i); v, i = _bdecode(b, i); out[k] = v
+        return out, i + 1
+    colon = b.index(b":", i); n = int(b[i:colon]); s0 = colon + 1
+    return b[s0:s0+n], s0 + n
+
+
+def _torrent_files(data):
+    info = _bdecode(data)[0][b"info"]
+    if b"files" in info:
+        return [("/".join(p.decode("utf-8", "replace") for p in f[b"path"]), f[b"length"]) for f in info[b"files"]]
+    return [(info[b"name"].decode("utf-8", "replace"), info[b"length"])]
+
+
+def _magnet_hash(magnet):
+    m = re.search(r"btih:([A-Za-z0-9]+)", magnet)
+    if not m:
+        raise ValueError("magnet has no info-hash")
+    h = m.group(1)
+    if len(h) == 32:
+        import base64
+        h = base64.b32decode(h.upper()).hex()
+    return h.lower()
+
+
+def peek(rid):
+    with LOCK:
+        x = RESULTS.get(rid)
+    if not x:
+        raise ValueError("result expired, search again")
+    kind_, link_ = resolve_link(x)
+    if kind_ == "torrent":
+        files = _torrent_files(link_)
+    else:
+        h = _magnet_hash(link_)
+        existing = json.loads(qbit(f"torrents/info?hashes={h}"))
+        if not existing:
+            qbit("torrents/add", {"urls": link_, "savepath": SAVE_PATH + "/.peek", "tags": "romseek-peek",
+                                  "stopCondition": "MetadataReceived", "addToTopOfQueue": "true"})
+        try:
+            if not existing:
+                qbit("torrents/setForceStart", {"hashes": h, "value": "true"})
+            files, deadline = [], time.time() + 45
+            while time.time() < deadline:
+                fl = json.loads(qbit(f"torrents/files?hash={h}") or b"[]")
+                if fl:
+                    files = [(f["name"], f["size"]) for f in fl]; break
+                time.sleep(1.5)
+        finally:
+            if not existing:
+                qbit("torrents/delete", {"hashes": h, "deleteFiles": "true"})
+        if not files:
+            raise ValueError("no peers answered in time; try again or pick the platform yourself")
+    votes = {}
+    for name, size in files:
+        p = EXT_PLATFORM.get(os.path.splitext(name)[1].lower()) or guess_platform(os.path.basename(name))
+        if p:
+            votes[p] = votes.get(p, 0) + size + 1
+    plats = sorted(votes, key=lambda p: -votes[p])
+    top = sorted(files, key=lambda f: -f[1])[:8]
+    return {"platform": plats[0] if len(plats) == 1 or (plats and votes[plats[0]] > 0.9 * sum(votes.values())) else "",
+            "candidates": plats, "count": len(files),
+            "files": [{"name": n, "size": s} for n, s in top]}
 
 
 # ---------------------------------------------------------------- importer
@@ -930,9 +1215,11 @@ class H(BaseHTTPRequestHandler):
                     log("  by", self.headers.get("Remote-User", "?"))
                 return self.send(200, info)
             body = json.loads(self.rfile.read(min(n, 10000)) or b"{}")
+            if self.path == "/api/peek":
+                return self.send(200, peek(str(body.get("id", ""))))
             if self.path == "/api/grab":
                 grab(str(body.get("id", "")), str(body.get("platform", "")),
-                     str(body.get("kind") or "rom"))
+                     str(body.get("kind") or "rom"), learn=bool(body.get("learn")))
                 log("  by", self.headers.get("Remote-User", "?"))
                 return self.send(200, {"ok": True})
             if self.path == "/api/firmware/delete":
@@ -956,6 +1243,8 @@ class H(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     os.makedirs(STATE_DIR, exist_ok=True)
     load_status()
+    load_titles(); load_learned()
     threading.Thread(target=importer_loop, daemon=True).start()
+    threading.Thread(target=titles_loop, daemon=True).start()
     log(f"romseek on :{PORT}; library {LIBRARY}; category {CATEGORY}")
     ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()

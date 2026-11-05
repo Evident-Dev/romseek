@@ -70,6 +70,17 @@ romseek creates a qBittorrent category `roms` on first start.
 
 See `.env.example`. Everything except `PROWLARR_KEY` has a default.
 
+## Platform detection
+
+Each search result's system is worked out, in order, from:
+
+1. **The release name**: console names, file extensions and known release groups (e.g. `[Wii]`, `.nsp`, `NGC`, `MoonCube`).
+2. **A game-title database** built from the No-Intro / Redump lists in [libretro-database](https://github.com/libretro/libretro-database). It's downloaded on first start into `state/titles.json` (~2.5 MB, ~56k titles) and refreshed every 30 days. A game only released on one system is placed automatically. Otherwise its systems are listed first in the picker. Switch, Neo Geo and arcade aren't in those lists.
+3. **Other results in the same search** for the same game: their majority system becomes the suggestion.
+4. **Your earlier choices**: picking a system for an unknown result is remembered for that title (`state/learned.json`).
+
+**Check files** asks the swarm for a torrent's file list (`stopCondition=MetadataReceived`, deleted right after, nothing downloaded) and reads the extensions. It needs peers, so it won't work on dead torrents. A **size?** badge flags results too big for one game on the detected system.
+
 ## Homepage widget
 
 `GET /api/stats` returns `{"pending": n, "roms": n, "platforms": n}` for dashboard tiles. For [Homepage](https://gethomepage.dev):

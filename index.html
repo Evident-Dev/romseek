@@ -107,6 +107,9 @@ a.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--ac
 .rbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 4px}
 .rbar label{font-family:var(--display,inherit);font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
 .rbar select{min-width:200px}
+.pickwrap{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.sys.empty-sys{opacity:.42;filter:grayscale(1)}
+.sys.empty-sys:hover,.sys.empty-sys:focus-visible{opacity:.8;filter:none}
 .toolbar{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-top:6px}
 .toolbar input[type=search]{flex:0 1 240px}
 /* ---- library: game tiles ---- */
@@ -578,19 +581,45 @@ function resultTable(d, action) {
   return `<table><thead><tr><th>Title</th><th>Size</th><th>Seeds</th><th>Source</th><th>Platform</th><th></th></tr></thead><tbody>${
     d.map(x => `<tr data-id="${x.id}" data-plat="${x.platform || ''}"><td class="t">${x.info ? `<a href="${esc(x.info)}" target="_blank" rel="noopener" style="color:inherit">${esc(x.title)}</a>` : esc(x.title)}</td>
     <td class="n">${size(x.size)}</td><td class="n">${x.seeders}</td><td class="n">${esc(x.indexer)}</td>
-    <td class="n">${x.platform ? platPill(x.platform) : unknownPicker(x)}</td>
+    <td class="n">${x.platform ? platPill(x.platform, x) : unknownPicker(x)}</td>
     <td class="a">${action(x)}</td></tr>`).join('')}</tbody></table>`;
 }
-function platPill(slug) {
-  if (!slug) return '<span class="pill need" title="RomSeek couldn\'t tell which system this is for, so it can\'t be grabbed">Unknown</span>';
+function platPill(slug, x) {
   const p = P(slug);
-  return `<span class="pill ${p.exists ? 'good' : ''}" title="${p.exists ? 'Set up in RomM' : 'Not set up in RomM yet: you\'ll be asked to add it'}">${esc(p.label)}</span>`;
+  const how = x && x.source === 'db' ? 'Identified from the game database (only released on this system). ' : '';
+  const warn = x && x.size_warn ? ` <span class="pill soft" title="${esc(x.size_warn)}. It may be a pack, or the wrong system.">size?</span>` : '';
+  return `<span class="pill ${p.exists ? 'good' : ''}" title="${how}${p.exists ? 'Set up in RomM' : 'Not set up in RomM yet: you\'ll be asked to add it'}">${esc(p.label)}</span>${warn}`;
 }
 function unknownPicker(x) {
-  // Unknown platform: let the user choose; pre-select the suggestion if any.
-  const o = PLAT.map(p => `<option value="${p.slug}"${p.slug === x.suggested ? ' selected' : ''}>${esc(p.label)}${p.slug === x.suggested ? ' (suggested)' : ''}</option>`).join('');
-  return `<select class="pick" title="RomSeek couldn't tell which system this is for${x.suggested ? '; the suggestion comes from matching results' : ''}">
-    <option value="">Choose platform…</option>${o}</select>`;
+  // Unknown platform: choose it. "Released on" (game database) first, the
+  // suggestion pre-selected; Check files reads the torrent's file list.
+  const cands = (x.candidates || []).filter(sl => PLAT.some(p => p.slug === sl));
+  const opt = p => `<option value="${p.slug}"${p.slug === x.suggested ? ' selected' : ''}>${esc(p.label)}${p.slug === x.suggested ? ' ★' : ''}</option>`;
+  const tip = x.suggested ? `Suggested from ${x.suggest_src}` : cands.length ? 'The game database lists the systems this game came out on' : "RomSeek couldn't tell which system this is for";
+  return `<div class="pickwrap"><select class="pick" title="${esc(tip)}">
+      <option value="">Choose platform…</option>
+      ${cands.length ? `<optgroup label="Released on">${cands.map(sl => opt(P(sl))).join('')}</optgroup><optgroup label="All systems">` : ''}
+      ${PLAT.filter(p => !cands.includes(p.slug)).map(opt).join('')}${cands.length ? '</optgroup>' : ''}
+    </select>
+    <button class="sm ghost peek" title="Ask the swarm for this torrent's file list (nothing is downloaded)">Check files</button></div>
+    ${x.suggested ? `<div class="help" style="margin:3px 0 0">★ ${esc(x.suggest_src)}</div>` : ''}`;
+}
+async function checkFiles(btn) {
+  const tr = btn.closest('tr'), sel = tr.querySelector('select.pick'), label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Checking…';
+  try {
+    const r = await api('api/peek', {id: tr.dataset.id});
+    const names = r.files.slice(0, 3).map(f => `${f.name.split('/').pop()} (${size(f.size)})`).join(', ');
+    let note = tr.querySelector('.peeknote');
+    if (!note) { note = document.createElement('div'); note.className = 'help peeknote'; tr.querySelector('td.t').appendChild(note); }
+    note.textContent = `${r.count} file${r.count === 1 ? '' : 's'}: ${names}${r.count > 3 ? ', …' : ''}`;
+    if (r.platform) {
+      sel.value = r.platform; tr.querySelector('button:not(.peek)').disabled = false;
+      toast(`Files look like ${P(r.platform).label}`, 'good');
+    } else if (r.candidates.length) toast(`Files could be: ${r.candidates.map(c => P(c).label).join(', ')}`, '');
+    else toast("The files don't reveal the system. Pick it yourself.", '');
+  } catch (err) { toast(err.message, 'bad'); }
+  finally { btn.disabled = false; btn.textContent = label; }
 }
 function renderResults() {
   const pf = $('#rplat') ? $('#rplat').value : '';
@@ -616,17 +645,18 @@ $('#f').onsubmit = async e => {
         <span class="help" style="margin:0">${RES.length} result${RES.length === 1 ? '' : 's'}</span></div>
       <div id="rtable"></div>`;
     $('#rplat').onchange = renderResults;
-    $('#res').onchange = e => { const sel = e.target.closest('select.pick'); if (sel) sel.closest('tr').querySelector('button').disabled = !sel.value; };
+    $('#res').onchange = e => { const sel = e.target.closest('select.pick'); if (sel) sel.closest('tr').querySelector('button:not(.peek)').disabled = !sel.value; };
     renderResults();
   } catch (err) { $('#res').innerHTML = `<div class="msg err">Search failed: ${esc(err.message)}</div>`; }
   finally { $('#go').disabled = false; }
 };
 $('#res').onclick = async e => {
   const btn = e.target.closest('button'); if (!btn || btn.disabled || !btn.closest('tr')) return;
+  if (btn.classList.contains('peek')) return checkFiles(btn);
   const tr = btn.closest('tr'), pick = tr.querySelector('select.pick'), slug = tr.dataset.plat || (pick && pick.value);
   if (!slug) { if (pick) { pick.focus(); toast('Choose a platform for this result first.', 'bad'); } return; }
   const name = tr.querySelector('td.t').textContent.trim();
-  const send = () => api('api/grab', {id: tr.dataset.id, platform: slug, kind: 'rom'});
+  const send = () => api('api/grab', {id: tr.dataset.id, platform: slug, kind: 'rom', learn: !tr.dataset.plat});
   btn.disabled = true; btn.textContent = '…';
   try {
     let ok = null;
@@ -716,10 +746,10 @@ function renderLib() {
 function renderHome() {
   const counts = {}; LIB.forEach(g => counts[g.platform] = (counts[g.platform] || 0) + 1);
   const systems = PLAT.filter(p => p.exists || counts[p.slug])
-    .sort((a, b) => (counts[b.slug] || 0) - (counts[a.slug] || 0) || a.label.localeCompare(b.label));
+    .sort((a, b) => (!counts[a.slug]) - (!counts[b.slug]) || a.label.localeCompare(b.label));
   $('#systems').innerHTML = !systems.length
     ? '<div class="empty" style="grid-column:1/-1">No systems yet. Add one in <a href="#platforms">Platforms &amp; BIOS</a>.</div>'
-    : systems.map(p => `<button class="sys" data-plat="${p.slug}">
+    : systems.map(p => `<button class="sys${counts[p.slug] ? '' : ' empty-sys'}" data-plat="${p.slug}">
         <div class="art">${logoImg(p)}</div>
         <div class="cap"><b>${esc(p.label)}</b>
           <span><i class="dot" style="background:${p.browser ? 'var(--ok)' : '#8b93a7'}"></i>${counts[p.slug] || 0} game${counts[p.slug] === 1 ? '' : 's'} · ${p.browser ? 'Plays in RomM' : 'Download only'}</span></div>
