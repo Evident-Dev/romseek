@@ -550,6 +550,14 @@ def import_torrent(t, slug, kind="rom"):
     return "imported", f"{linked} file(s) -> {slug}"
 
 
+def finished(t):
+    """Done = every *selected* file is complete. Overall progress stays below 100%
+    when qBittorrent skipped files (e.g. excluded *.exe), so check amount_left."""
+    if t.get("progress", 0) >= 1:
+        return True
+    return t.get("amount_left", 1) == 0 and not t.get("state", "").endswith(("DL", "checkingResumeData"))
+
+
 def tag_target(tags):
     for x in tags:
         k, _, s = x.partition(":")
@@ -567,7 +575,7 @@ def importer_loop():
                 h = t["hash"]
                 tags = [x.strip() for x in t.get("tags", "").split(",")]
                 kind, slug = tag_target(tags)
-                if "imported" in tags or "blocked" in tags or t.get("progress", 0) < 1:
+                if "imported" in tags or "blocked" in tags or not finished(t):
                     continue
                 if slug not in SLUGS:
                     set_status(h, "blocked", "no rom:/bios:<platform> tag")
@@ -596,7 +604,7 @@ def queue():
             state = "imported"
         elif "blocked" in tags:
             state = "blocked"
-        elif t.get("progress", 0) < 1:
+        elif not finished(t):
             state = "downloading"
         else:
             state = st.get("state", "waiting")
@@ -605,6 +613,8 @@ def queue():
             "name": t["name"], "progress": t.get("progress", 0), "size": t.get("size", 0),
             "added": t.get("added_on", 0),
             "eta": t.get("eta"), "dlspeed": t.get("dlspeed", 0), "seeds": t.get("num_seeds", 0),
+            "peers": t.get("num_leechs", 0), "seeds_total": t.get("num_complete", 0),
+            "peers_total": t.get("num_incomplete", 0), "qstate": t.get("state", ""),
             "platform": slug, "kind": kind,
             "state": state, "detail": st.get("detail", ""),
         })
