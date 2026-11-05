@@ -87,7 +87,7 @@ FIRMWARE = os.environ.get("ROMM_FIRMWARE", os.path.join(os.path.dirname(LIBRARY)
 # BIOS/firmware needs for RomM's in-browser player (EmulatorJS).
 BIOS = {
     "segacd": "required", "saturn": "required", "neogeoaes": "required",
-    "neogeomvs": "required", "ps2": "required", "dc": "required",
+    "neogeomvs": "required", "ps2": "required", "dc": "recommended",
     "psx": "recommended", "arcade": "some games",
     "gba": "optional", "nds": "optional",
     "xbox": "required", "ps3": "required", "psvita": "required", "switch": "required",
@@ -96,7 +96,7 @@ BIOS = {
 # One-line explanation shown on the platform card.
 BIOS_NOTE = {
     "ps2": "PCSX2 needs a PS2 BIOS dump (e.g. SCPH-39001).",
-    "dc": "Flycast needs dc_boot.bin and dc_flash.bin.",
+    "dc": "Flycast has a built-in BIOS that runs most games; the real dc_boot.bin + dc_flash.bin fix the rest.",
     "xbox": "xemu needs the MCPX boot ROM, a flash BIOS image and a hard-disk image.",
     "ps3": "RPCS3 needs Sony's PS3 system software (PS3UPDAT.PUP). It's a free download from Sony.",
     "psvita": "Vita3K needs Sony's PS Vita firmware (PSVUPDAT.PUP). It's a free download from Sony.",
