@@ -168,7 +168,16 @@ def romm_index():
             page = json.loads(http(f"{ROMM_URL}/api/roms?{q}", headers=hdr, timeout=30).read())
             items = page.get("items", []) if isinstance(page, dict) else page
             for r in items:
-                roms[(r.get("platform_id"), r.get("fs_name"))] = r["id"]
+                m = r.get("metadatum") or {}
+                ms = m.get("first_release_date")
+                roms[(r.get("platform_id"), r.get("fs_name"))] = {
+                    "id": r["id"], "name": r.get("name") or "", "fs_name": r.get("fs_name") or "",
+                    "cover": (r.get("path_cover_large") or r.get("path_cover_small") or "").strip(),
+                    "year": time.gmtime(ms / 1000).tm_year if isinstance(ms, (int, float)) and ms > 0 else None,
+                    "genres": (m.get("genres") or [])[:3],
+                    "summary": (r.get("summary") or "")[:400],
+                    "identified": bool(r.get("is_identified")),
+                }
             offset += len(items)
             if not items or not isinstance(page, dict) or offset >= (page.get("total") or 0):
                 break
@@ -312,6 +321,51 @@ def game_count(slug):
         return 0
 
 
+def romm_meta(r):
+    """RomM metadata for a library entry (empty when RomM hasn't scanned it yet)."""
+    if not r:
+        return {"romm_id": None}
+    return {"romm_id": r["id"], "title": r["name"], "fs_name": r["fs_name"],
+            "cover": ("api/img?p=" + urllib.parse.quote(r["cover"], safe="")) if r["cover"] else "",
+            "year": r["year"], "genres": r["genres"], "summary": r["summary"],
+            "identified": r["identified"]}
+
+
+_IMG_CACHE = {}
+
+
+def romm_asset(path):
+    """Fetch a RomM static asset (covers, platform logos) server-side, so images
+    work even where RomM's assets need auth. Only /assets/ paths are allowed."""
+    path = "/" + path.lstrip("/")
+    if not path.startswith("/assets/") or ".." in path:
+        raise ValueError("bad asset path")
+    hit = _IMG_CACHE.get(path)
+    if hit and time.time() - hit[2] < 3600:
+        return hit[0], hit[1]
+    hdr = {"Authorization": f"Bearer {ROMM_TOKEN}"} if ROMM_TOKEN else {}
+    r = http(ROMM_URL + urllib.parse.quote(path, safe="/?=&%:"), headers=hdr, timeout=20)
+    data, ctype = r.read(), (r.headers.get("Content-Type") or "application/octet-stream").split(";")[0]
+    if not ctype.startswith("image/"):
+        raise ValueError("not an image")
+    if len(_IMG_CACHE) > 500:
+        _IMG_CACHE.clear()
+    _IMG_CACHE[path] = (data, ctype, time.time())
+    return data, ctype
+
+
+def platform_logo(slug):
+    if slug not in SLUGS:
+        raise ValueError("unknown platform")
+    for name in (slug, {"sega32": "32x", "neogeomvs": "neogeoaes"}.get(slug, slug)):
+        for ext in ("svg", "ico", "png"):
+            try:
+                return romm_asset(f"/assets/platforms/{name}.{ext}")
+            except (urllib.error.HTTPError, ValueError):
+                continue
+    raise ValueError("no logo")
+
+
 def library():
     """Games on disk: each top-level file or folder in roms/<slug>/ is one game in RomM."""
     out = []
@@ -338,7 +392,7 @@ def library():
             idx = romm_index()
             out.append({"name": e.name, "platform": slug, "size": size, "files": files,
                         "folder": e.is_dir(), "added": int(added),
-                        "romm_id": idx["roms"].get((idx["platforms"].get(slug), e.name))})
+                        **romm_meta(idx["roms"].get((idx["platforms"].get(slug), e.name)))})
     out.sort(key=lambda g: -g["added"])
     return out
 
@@ -700,13 +754,13 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def send(self, code, body, ctype="application/json"):
+    def send(self, code, body, ctype="application/json", cache=None):
         if not isinstance(body, bytes):
             body = (json.dumps(body) if ctype == "application/json" else body).encode()
         self.send_response(code)
-        self.send_header("Content-Type", ctype + "; charset=utf-8")
+        self.send_header("Content-Type", ctype if ctype.startswith("image/") else ctype + "; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache or "no-store")
         self.end_headers()
         self.wfile.write(body)
 
@@ -725,6 +779,18 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, search(q, any_category=(qs.get("kind") or [""])[0] == "bios"))
             if u.path == "/api/platforms":
                 return self.send(200, platforms())
+            if u.path == "/api/img":
+                try:
+                    data, ctype = romm_asset((qs.get("p") or [""])[0])
+                except (ValueError, urllib.error.URLError):
+                    return self.send(404, {"error": "no image"})
+                return self.send(200, data, ctype, cache="private, max-age=86400")
+            if u.path.startswith("/api/logo/"):
+                try:
+                    data, ctype = platform_logo(u.path.rsplit("/", 1)[-1])
+                except (ValueError, urllib.error.URLError):
+                    return self.send(404, {"error": "no logo"})
+                return self.send(200, data, ctype, cache="private, max-age=604800")
             if u.path == "/api/config":
                 return self.send(200, {"romm": ROMM_PUBLIC, "linked": bool(ROMM_TOKEN),
                                        "romm_error": romm_index()["error"]})
