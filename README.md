@@ -45,8 +45,8 @@ The full guide takes about 20 minutes: **[Setup guide](docs/setup.md)**
 
 ## Support
 
-Note: GitHub Issues are for bugs and feature requests only.
-
+- [Ask a question or get setup help](../../discussions/categories/q-a) (GitHub Discussions)
+- [Share an idea](../../discussions/categories/ideas) or [show off your setup](../../discussions/categories/show-and-tell)
 - [Report a bug](../../issues/new?template=bug_report.yml)
 - [Request a feature](../../issues/new?template=feature_request.yml)
 - [Report a security problem](SECURITY.md)

@@ -1,0 +1,49 @@
+title: "[Help] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for asking. Check the [troubleshooting guide](https://github.com/Evident-Dev/romseek/blob/main/docs/troubleshooting.md) first; most setup problems are covered there.
+
+        **Don't paste API keys, RomM tokens or your domain.** Replace them with `xxx`.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's going wrong?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part?
+      options:
+        - Setup / getting it running
+        - Searching (Prowlarr)
+        - Downloads (qBittorrent)
+        - Importing into RomM
+        - Virus scanning
+        - BIOS / firmware
+        - Library, collections or game pages
+        - Metadata lookup / admin menu
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: RomSeek log
+      description: Output of `docker logs --tail 100 romseek`, with secrets removed.
+      render: text
+  - type: textarea
+    id: setup
+    attributes:
+      label: Your setup
+      description: RomM, Prowlarr and qBittorrent versions, and your reverse proxy / login (e.g. Caddy + Authelia).
+      placeholder: |
+        RomSeek commit:
+        RomM:
+        Prowlarr:
+        qBittorrent:
+        Proxy / login:

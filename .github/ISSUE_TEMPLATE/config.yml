@@ -1,5 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Setup help
+  - name: Help with setup or a problem
+    url: https://github.com/Evident-Dev/romseek/discussions/categories/q-a
+    about: Ask in Q&A. Check the troubleshooting guide first.
+  - name: Suggest an idea
+    url: https://github.com/Evident-Dev/romseek/discussions/categories/ideas
+    about: Talk ideas through in Discussions before opening a feature request.
+  - name: Troubleshooting guide
     url: https://github.com/Evident-Dev/romseek/blob/main/docs/troubleshooting.md
-    about: Check the troubleshooting guide before opening an issue.
+    about: Fixes for the most common problems.

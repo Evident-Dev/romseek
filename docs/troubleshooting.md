@@ -46,6 +46,9 @@ Pick the right one before you grab. RomSeek remembers your choice for that title
 **PC games show up in results.**
 Some indexers mark PC games as Console. Results with no known system sort last. Use `EXCLUDED_INDEXERS` to hide a bad indexer.
 
+**Still stuck?**
+Ask in [Discussions → Q&A](https://github.com/Evident-Dev/romseek/discussions/categories/q-a). Include your RomSeek log (`docker logs --tail 100 romseek`) with keys and tokens removed.
+
 ---
 
 [← Back to README](../README.md)

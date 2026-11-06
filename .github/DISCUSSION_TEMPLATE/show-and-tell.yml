@@ -1,0 +1,8 @@
+body:
+  - type: textarea
+    id: show
+    attributes:
+      label: Show us your setup
+      description: Screenshots, your stack, collections you've made, tips for others. Blur domains and keys.
+    validations:
+      required: true

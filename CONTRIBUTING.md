@@ -23,7 +23,7 @@ Thanks for helping. Keep changes small and focused.
 
 ## Pull requests
 
-1. Open an issue first for anything bigger than a bug fix.
+1. For anything bigger than a bug fix, start in [Discussions → Ideas](https://github.com/Evident-Dev/romseek/discussions/categories/ideas) or open an issue first.
 2. Make one change per pull request.
 3. Say what you tested and on which RomM, Prowlarr and qBittorrent versions.
 4. Update the docs in `docs/` if you change a setting or a screen.
