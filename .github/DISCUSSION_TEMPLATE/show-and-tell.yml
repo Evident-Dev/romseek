@@ -3,6 +3,6 @@ body:
     id: show
     attributes:
       label: Show us your setup
-      description: Screenshots, your stack, collections you've made, tips for others. Blur domains and keys.
+      description: Screenshots, your stack, collections you've made, tips for others. Blur domains and keys, and don't include download sites or indexer names.
     validations:
       required: true

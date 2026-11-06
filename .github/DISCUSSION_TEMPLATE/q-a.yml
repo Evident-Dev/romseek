@@ -7,6 +7,8 @@ body:
         Thanks for asking. Check the [troubleshooting guide](https://github.com/Evident-Dev/romseek/blob/main/docs/troubleshooting.md) first; most setup problems are covered there.
 
         **Don't paste API keys, RomM tokens or your domain.** Replace them with `xxx`.
+
+        **No piracy requests.** Don't share or ask for ROMs, BIOS files, keys or download sites; those posts are removed. See [Legal](https://github.com/Evident-Dev/romseek/blob/main/docs/legal.md).
   - type: textarea
     id: problem
     attributes:

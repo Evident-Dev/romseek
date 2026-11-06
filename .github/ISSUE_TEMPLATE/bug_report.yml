@@ -4,7 +4,7 @@ labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: Check the [troubleshooting guide](https://github.com/Evident-Dev/romseek/blob/main/docs/troubleshooting.md) first. Remove API keys, tokens and IP addresses before you paste anything.
+      value: Check the [troubleshooting guide](https://github.com/Evident-Dev/romseek/blob/main/docs/troubleshooting.md) first. Remove API keys, tokens and IP addresses before you paste anything. Don't include ROM, BIOS or key file names you downloaded, or indexer/site names ([Legal](https://github.com/Evident-Dev/romseek/blob/main/docs/legal.md)).
   - type: textarea
     id: what
     attributes:

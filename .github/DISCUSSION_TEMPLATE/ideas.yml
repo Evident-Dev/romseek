@@ -3,6 +3,8 @@ body:
     attributes:
       value: |
         Ideas start here so others can weigh in. Popular, well-defined ones become issues.
+
+        **No piracy requests.** Don't share or ask for ROMs, BIOS files, keys or download sites; those posts are removed. See [Legal](https://github.com/Evident-Dev/romseek/blob/main/docs/legal.md).
   - type: textarea
     id: idea
     attributes:

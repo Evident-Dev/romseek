@@ -75,6 +75,8 @@ Open **Library → Collections**.
 4. **Check files (optional).** The **Check files** button reads a torrent's file list from peers without downloading it. It needs live peers. A **size?** badge means the result is too big for one game on that system.
 5. **Import.** Every 60 seconds it looks at finished downloads. It runs the safety checks, waits for the virus scan if you set one, then links the files into `roms/<system>/` or `bios/<system>/`. RomM picks them up from there.
 
+RomSeek doesn't ship or link to any games, BIOS or keys. What you search for and download is up to you; see [Legal](legal.md).
+
 RomSeek keeps its own data in the `state` folder: download status, learned systems, collections, the title list and the GameTDB ID lists.
 
 ---

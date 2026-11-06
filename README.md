@@ -13,7 +13,7 @@ RomSeek is a game download manager for [RomM](https://github.com/rommapp/romm). 
 - Search every Prowlarr indexer for console games in one place
 - Detects the system for each result from the release name, a 56,000-title game list and your past choices
 - Sends downloads to qBittorrent and imports finished games into RomM on its own
-- Finds and installs BIOS files for the systems that need them
+- Sets up BIOS files for the systems that need them (upload your own dumps, or use the maker's official download where there is one)
 - Blocks Windows programs and junk files from your library
 - Optional virus scan gate that works with ClamAV
 - Library view by system, genre and auto-updating collections
@@ -42,6 +42,7 @@ The full guide takes about 20 minutes: **[Setup guide](docs/setup.md)**
 - [Configuration](docs/configuration.md): every setting in `romseek.env`
 - [Features](docs/features.md): admin tools, collections, the Homepage widget, and how imports work
 - [Troubleshooting](docs/troubleshooting.md): fixes for common problems
+- [Legal](docs/legal.md): your rights to download, and what not to post here
 
 ## Support
 
@@ -55,9 +56,15 @@ The full guide takes about 20 minutes: **[Setup guide](docs/setup.md)**
 
 Pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
-## Legal
+## Your rights to download
 
-Only download games you have the right to. Dumping your own cartridges and discs is the clean way to do it.
+RomSeek is a tool, like Sonarr or Radarr. It doesn't include, host or link to any games, BIOS files or keys, and it only searches indexers you add yourself.
+
+**Only download games, BIOS and firmware you have the legal right to**, such as your own dumps of cartridges, discs and consoles you own, homebrew, or content the rights holder gives away. Laws differ by country, and getting around copy protection (for example decryption keys) is illegal in many places even for games you own.
+
+Don't use this project's Issues or Discussions to share or ask for ROMs, BIOS files, keys or download sites. Those posts will be removed.
+
+Read more: **[Legal: your rights to download](docs/legal.md)** (general information, not legal advice).
 
 ## License
 

@@ -2,6 +2,8 @@
 
 ## Before you start
 
+> ⚖️ Only use RomSeek for games, BIOS and firmware you have the legal right to download. See [Legal](legal.md).
+
 You need these already running in Docker:
 
 - [ ] **RomM** 5.3 or newer

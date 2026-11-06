@@ -2,6 +2,9 @@ name: Feature request
 description: Suggest something new for RomSeek.
 labels: [enhancement]
 body:
+  - type: markdown
+    attributes:
+      value: "Feature requests to add specific ROM, BIOS or key sources, or to get around copy protection, will be closed. See [Legal](https://github.com/Evident-Dev/romseek/blob/main/docs/legal.md)."
   - type: textarea
     id: problem
     attributes:
