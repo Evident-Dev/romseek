@@ -182,8 +182,8 @@ def romm_index():
                     "id": r["id"], "name": r.get("name") or "", "fs_name": r.get("fs_name") or "",
                     "cover": (r.get("path_cover_large") or r.get("path_cover_small") or "").strip(),
                     "year": time.gmtime(ms / 1000).tm_year if isinstance(ms, (int, float)) and ms > 0 else None,
-                    "genres": (m.get("genres") or [])[:3],
-                    "summary": (r.get("summary") or "")[:400],
+                    "genres": (m.get("genres") or [])[:6],
+                    "summary": (r.get("summary") or "")[:2500],
                     "identified": bool(r.get("is_identified")),
                 }
             offset += len(items)
@@ -1188,6 +1188,7 @@ def romm_call(method, path, fields=None, query=None, json_body=None, timeout=90)
 
 def romm_changed():
     _ROMM_CACHE["t"] = 0
+    _FW_CACHE.clear()
     _IMG_CACHE.clear()
 
 
@@ -1475,6 +1476,77 @@ def remove_game(slug, name, rom_id, delete_torrent):
     return {"ok": True, "torrents": len(torrents)}
 
 
+
+# ---------------------------------------------------------------- collections
+# Admin-made collections ("The Legend of Zelda"): rules matched in the browser
+# against the library (keywords in the title, systems, genres, year range).
+COLLECTIONS_FILE = os.path.join(STATE_DIR, "collections.json")
+
+
+def load_collections():
+    try:
+        with open(COLLECTIONS_FILE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def save_collection(body):
+    cols = load_collections()
+    name = str(body.get("name") or "").strip()[:80]
+    if not name:
+        raise ValueError("give the collection a name")
+    lst = lambda k, n=40: [str(x).strip()[:60] for x in (body.get(k) or []) if str(x).strip()][:n]
+    yr = lambda k: int(body[k]) if str(body.get(k) or "").isdigit() and 1970 <= int(body[k]) <= 2100 else None
+    col = {"id": str(body.get("id") or "") or hashlib.md5(os.urandom(8)).hexdigest()[:10],
+           "name": name, "keywords": [k.lower() for k in lst("keywords")],
+           "exclude": [k.lower() for k in lst("exclude")],
+           "systems": [x for x in lst("systems") if x in SLUGS], "genres": lst("genres"),
+           "year_from": yr("year_from"), "year_to": yr("year_to"), "updated": int(time.time())}
+    if not (col["keywords"] or col["systems"] or col["genres"] or col["year_from"] or col["year_to"]):
+        raise ValueError("add at least one rule (keyword, system, genre or year)")
+    cols = [c for c in cols if c["id"] != col["id"]] + [col]
+    cols.sort(key=lambda c: c["name"].lower())
+    tmp = COLLECTIONS_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(cols, f, indent=1)
+    os.replace(tmp, COLLECTIONS_FILE)
+    log("collection saved", col["name"])
+    return col
+
+
+def delete_collection(cid):
+    cols = load_collections()
+    left = [c for c in cols if c["id"] != cid]
+    if len(left) == len(cols):
+        raise ValueError("no such collection")
+    with open(COLLECTIONS_FILE + ".tmp", "w") as f:
+        json.dump(left, f, indent=1)
+    os.replace(COLLECTIONS_FILE + ".tmp", COLLECTIONS_FILE)
+    log("collection deleted", cid)
+    return {"ok": True}
+
+
+_FW_CACHE = {}
+
+
+def platform_firmware(slug):
+    """BIOS files RomM knows for a system, with RomM download paths."""
+    pid = romm_index()["platforms"].get(slug)
+    if not pid or not ROMM_TOKEN:
+        return []
+    hit = _FW_CACHE.get(slug)
+    if hit and time.time() - hit[0] < 120:
+        return hit[1]
+    items = romm_call("GET", "/api/firmware", query={"platform_id": pid}, timeout=30) or []
+    out = [{"name": f["file_name"], "size": f.get("file_size_bytes") or 0,
+            "path": f"/api/firmware/{f['id']}/content/{urllib.parse.quote(f['file_name'])}"}
+           for f in items if not f.get("missing_from_fs")]
+    out.sort(key=lambda f: f["name"].lower())
+    _FW_CACHE[slug] = (time.time(), out)
+    return out
+
+
 # ---------------------------------------------------------------- web
 PAGE = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"), encoding="utf-8").read()
 
@@ -1548,6 +1620,13 @@ class H(BaseHTTPRequestHandler):
                 if u.path == "/api/game/torrents":
                     return self.send(200, game_torrents(g("platform"), g("name")))
                 return self.send(200, meta_search(g("platform"), g("name"), g("rom_id"), g("q")))
+            if u.path == "/api/collections":
+                return self.send(200, load_collections())
+            if u.path == "/api/bios-files":
+                slug = (qs.get("platform") or [""])[0]
+                if slug not in SLUGS:
+                    return self.send(400, {"error": "unknown platform"})
+                return self.send(200, platform_firmware(slug))
             if u.path == "/healthz":
                 return self.send(200, {"ok": True})
             return self.send(404, {"error": "not found"})
@@ -1592,6 +1671,12 @@ class H(BaseHTTPRequestHandler):
                 else:
                     return self.send(404, {"error": "not found"})
                 log("  by", who)
+                return self.send(200, r)
+            if self.path in ("/api/collections", "/api/collections/delete"):
+                if not is_admin(self.headers):
+                    return self.send(403, {"error": "admins only"})
+                r = save_collection(body) if self.path == "/api/collections" else delete_collection(str(body.get("id", "")))
+                log("  by", self.headers.get("Remote-User", "?"))
                 return self.send(200, r)
             if self.path == "/api/cancel":
                 if not is_admin(self.headers):

@@ -305,15 +305,102 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
 .xcancel{width:28px;height:28px;padding:0;flex:none;display:inline-flex;align-items:center;justify-content:center;font-size:13px;line-height:1;background:transparent!important;border:1px solid var(--line-strong);color:var(--muted)}
 .xcancel:hover{color:var(--bad)!important;border-color:var(--bad)!important;box-shadow:none!important;background:rgba(224,86,111,.08)!important}
 @media (max-width:700px){.stwrap{justify-content:flex-start}.stwrap>div{text-align:left}}
+/* ===== library v2: sub-tabs, shelves, collections, game page ===== */
+.subnav{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:4px 0 16px}
+.subnav a{font-family:var(--display,inherit);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:10px 14px;text-decoration:none}
+.subnav a:hover{color:var(--text)}
+.subnav a.on{color:var(--text);box-shadow:inset 0 -2px 0 var(--accent)}
+.vbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:18px 0 10px}
+.vbar h2{margin:0}
+#vSystems>.vbar:first-child,#vCollections>.vbar:first-child{margin-top:0}
+.chk{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);cursor:pointer;user-select:none}
+.chk input{margin:0;width:16px;height:16px;accent-color:var(--accent)}
+.shelf{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(150px,172px);gap:14px;overflow-x:auto;padding:2px 2px 12px;scroll-snap-type:x proximity;scrollbar-width:thin}
+.shelf>.game{scroll-snap-align:start}
+.shelfhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:22px 0 10px}
+.shelfhead h2{margin:0}
+.shelfhead a{font-family:var(--display,inherit);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);text-decoration:none;white-space:nowrap}
+.game a.cl{position:absolute;inset:0;display:block;z-index:1}
+.game .cover>img,.game .cover>.ph{pointer-events:none}
+.game .cover .badge{z-index:2}
+.game .info a.tl{color:#fff;text-decoration:none}
+.game .info a.tl:hover b{color:var(--accent)}
+.ccards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.ccard{position:relative;display:flex;flex-direction:column;text-decoration:none;color:var(--text);background:var(--panel);border:1px solid var(--line);transition:transform .15s,border-color .15s,box-shadow .15s}
+.ccard:hover,.ccard:focus-visible{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.ccard.empty-col{opacity:.45}
+.mosaic{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;aspect-ratio:16/10;background:#0a0c10;overflow:hidden;gap:1px}
+.mosaic.n1{grid-template-columns:1fr;grid-template-rows:1fr}
+.mosaic.n2{grid-template-rows:1fr}
+.mosaic img{width:100%;height:100%;object-fit:cover;display:block}
+.mosaic .mph{display:flex;align-items:center;justify-content:center;background:radial-gradient(120% 120% at 50% 0%,#1d2430,#0a0c10);font-size:34px}
+.ccard .cap{padding:10px 12px 12px;border-top:1px solid var(--line);background:var(--bg-2)}
+.ccard .cap b{display:block;color:#fff;font-size:15px;line-height:1.25}
+.ccard .cap span{color:var(--muted);font-size:12px}
+.ccard .cedit{position:absolute;top:6px;right:6px;z-index:2;width:30px;height:30px;padding:0;background:rgba(10,12,16,.8)!important;border:1px solid var(--line-strong);color:#fff;font-size:14px}
+.hero .mosaic{width:150px;flex:none;aspect-ratio:16/10}
+.hero .acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+/* game page */
+.gpage{position:relative}
+.gtop{position:relative;overflow:hidden;border:1px solid var(--line);background:#0a0c10}
+.gtop .bd{position:absolute;inset:-40px;background-size:cover;background-position:center;filter:blur(36px) brightness(.32) saturate(1.2);transform:scale(1.1)}
+.gtop .in{position:relative;display:grid;grid-template-columns:220px 1fr;gap:26px;padding:26px}
+.gcover{position:relative;aspect-ratio:3/4;background:#0a0c10;border:1px solid var(--line-strong);box-shadow:0 20px 50px -10px rgba(0,0,0,.8);overflow:hidden}
+.gcover img{width:100%;height:100%;object-fit:contain;display:block}
+.gcover .ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:14px;text-align:center}
+.gcover .ph img{width:60%;height:auto;max-height:40%;object-fit:contain}
+.ginfo{min-width:0;display:flex;flex-direction:column;gap:10px}
+.ginfo .sysl{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;text-decoration:none;color:var(--muted);font-family:var(--display,inherit);font-size:11px;letter-spacing:.14em;text-transform:uppercase;border:1px solid var(--line-strong);padding:5px 10px;background:rgba(10,12,16,.55)}
+.ginfo .sysl:hover{color:var(--text);border-color:var(--accent)}
+.ginfo .sysl img{height:16px;width:auto}
+.ginfo h1{margin:0;font-family:var(--display,inherit);font-size:34px;line-height:1.1;color:#fff;font-weight:700;letter-spacing:.01em}
+.ginfo .gmeta{display:flex;flex-wrap:wrap;gap:6px 14px;color:#c7cede;font-size:14px}
+.ginfo .gmeta span+span::before{content:"·";margin-right:14px;color:var(--muted)}
+.ginfo .gsum{margin:0;color:#c7cede;font-size:15px;line-height:1.6;max-width:75ch;white-space:pre-line}
+.ginfo .gsum.clamp{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+.ginfo .more{all:unset;cursor:pointer;color:var(--accent);font-size:13px;align-self:flex-start}
+.ginfo .gact{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.btn.big{padding:11px 20px;font-size:14px;font-weight:700;letter-spacing:.06em}
+.btn.play{background:var(--ok);border-color:var(--ok);color:#06080b}
+.gpage .kebab.inline{position:static;opacity:1;width:40px;height:40px;font-size:20px;display:inline-flex;align-items:center;justify-content:center;padding:0;background:rgba(10,12,16,.6);border:1px solid var(--line-strong);color:#fff}
+.gsteps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px}
+.step{background:var(--panel);border:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:10px}
+.step h3{margin:0;display:flex;align-items:center;gap:10px;font-family:var(--display,inherit);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#fff}
+.step h3 .n{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:1px solid var(--accent);color:var(--accent);font-size:12px}
+.step p{margin:0;color:var(--muted);font-size:14px;line-height:1.5}
+.step .row{gap:8px}
+.step.ok h3 .n{border-color:var(--ok);color:var(--ok)}
+.flist{display:flex;flex-direction:column;border:1px solid var(--line);max-height:260px;overflow:auto}
+.flist a{display:flex;justify-content:space-between;gap:10px;padding:7px 10px;font-size:13px;color:var(--text);text-decoration:none;border-bottom:1px solid var(--line)}
+.flist a:last-child{border-bottom:0}
+.flist a:hover{background:var(--panel2);color:#fff}
+.flist a span{color:var(--muted);white-space:nowrap}
+.flist a b{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.colform{display:flex;flex-direction:column;gap:12px}
+.colform label{display:flex;flex-direction:column;gap:4px;margin:0;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.colform input{text-transform:none;letter-spacing:0;font-size:14px;color:var(--text)}
+.erow2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.colform fieldset{border:1px solid var(--line);padding:8px 10px 10px;margin:0}
+.colform legend{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:0 4px}
+.colform legend .help{text-transform:none;letter-spacing:0}
+.ticks{display:flex;flex-wrap:wrap;gap:6px;max-height:150px;overflow:auto}
+.ticks label{flex-direction:row;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);border:1px solid var(--line-strong);padding:4px 9px;cursor:pointer;background:var(--bg-2)}
+.ticks label:has(input:checked){border-color:var(--accent);background:rgba(91,155,213,.12)}
+.ticks input{margin:0;accent-color:var(--accent)}
+@media (max-width:900px){.gsteps{grid-template-columns:1fr}.gtop .in{grid-template-columns:170px 1fr;gap:18px;padding:18px}.ginfo h1{font-size:26px}}
+@media (max-width:600px){.gtop .in{grid-template-columns:1fr}.gcover{width:min(220px,60vw);margin:0 auto}.ginfo h1{font-size:24px}.erow2{grid-template-columns:1fr}
+  .shelf{grid-auto-columns:minmax(132px,140px);gap:10px}.ccards{grid-template-columns:repeat(2,1fr);gap:10px}.subnav a{padding:10px 10px}}
+@media (min-width:1440px){.shelf{grid-auto-columns:minmax(170px,190px)}.ccards{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}}
+@media (min-width:1800px){.shelf{grid-auto-columns:minmax(190px,206px)}}
 </style>
 </head>
 <body>
 <header>
   <div class="top"><h1 class="brand"><svg class="brand-logo" viewBox="0 0 100 100" width="30" height="30" aria-hidden="true"><defs><clipPath id="rs-c"><circle cx="50" cy="50" r="50"/></clipPath><clipPath id="rs-s"><polygon points="6,92 86,12 110,12 110,110 6,110"/></clipPath></defs><g clip-path="url(#rs-c)"><rect width="100" height="100" fill="#e4eef8"/><rect width="100" height="100" fill="#a9c7e4" clip-path="url(#rs-s)"/><path d="M-2 38C14 38 24 21 38 15C54 9 72 14 80 22C88 36 92 56 102 72L102 104L-2 104Z" fill="#3d7cc0"/><path d="M-2 38C14 38 24 21 38 15C54 9 72 14 80 22C88 36 92 56 102 72L102 104L-2 104Z" fill="#1c3a62" clip-path="url(#rs-s)"/><circle cx="52" cy="27" r="5.3" fill="#f4e3b6"/><circle cx="42.8" cy="36.2" r="5.3" fill="#f4e3b6"/><circle cx="61.2" cy="36.2" r="5.3" fill="#f2ae62"/><circle cx="52" cy="45.4" r="5.3" fill="#f2ae62"/><circle cx="52" cy="36.2" r="18.5" fill="#f5f8fc" fill-opacity=".14" stroke="#f5f8fc" stroke-width="4.6"/><line x1="66.2" y1="50.4" x2="83" y2="67.2" stroke="#0f2440" stroke-width="11" stroke-linecap="round"/><line x1="66.2" y1="50.4" x2="83" y2="67.2" stroke="#f5f8fc" stroke-width="7" stroke-linecap="round"/><path d="M39.6 30.2a13.4 13.4 0 0 1 7.6-6.6" fill="none" stroke="#f5f8fc" stroke-width="2.6" stroke-linecap="round" opacity=".9"/></g></svg><span class="brand-name">RomSeek</span></h1><a id="rommLink" href="#" target="_blank" rel="noopener">Open RomM →</a></div>
   <nav>
+    <button data-tab="library">Library<span class="count" id="actCount" hidden></span></button>
     <button data-tab="download">Download games</button>
     <button data-tab="platforms">Platforms &amp; BIOS</button>
-    <button data-tab="library">Library<span class="count" id="actCount" hidden></span></button>
   </nav>
 </header>
 
@@ -352,19 +439,33 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
     <div id="activity"></div>
   </div>
 
-  <!-- home: one tile per system -->
-  <div id="libHome">
-    <h2>Systems</h2>
+  <!-- sub-tabs (top-level views) -->
+  <div class="subnav" id="libTabs">
+    <a href="#library" data-v="systems">Systems</a>
+    <a href="#library/collections" data-v="collections">Collections</a>
+  </div>
+  <!-- back bar (detail views) -->
+  <div class="crumbs" id="crumbs" hidden><button class="ghost sm" id="libBack" title="Back (Esc)">← Back</button><span class="crumb" id="crumbTxt"></span></div>
+
+  <!-- systems -->
+  <div id="vSystems">
+    <div class="vbar"><h2>Systems</h2><label class="chk"><input type="checkbox" id="showAll"> Show all platforms</label></div>
     <div class="systems" id="systems"></div>
-    <div id="recentWrap" hidden>
-      <h2>Recently added</h2>
-      <div class="games" id="recent"></div>
-    </div>
+    <div id="homeShelves"></div>
   </div>
 
-  <!-- one system -->
-  <div id="libPlat" hidden>
-    <div class="crumbs" id="crumbs"><button class="ghost sm" id="libBack" title="Back to all systems (Esc)">← All systems</button><span class="crumb">Library <i>/</i> <b id="crumbName"></b></span></div>
+  <!-- collections -->
+  <div id="vCollections" hidden>
+    <div class="vbar"><h2>Smart collections</h2></div>
+    <div class="ccards" id="cSmart"></div>
+    <div class="vbar"><h2>Your collections</h2><button class="sm" id="newCol" hidden>+ New collection</button></div>
+    <div class="ccards" id="cCustom"></div>
+    <div class="vbar"><h2>Genres</h2></div>
+    <div class="ccards" id="cGenres"></div>
+  </div>
+
+  <!-- one system / one collection -->
+  <div id="vList" hidden>
     <div class="hero" id="hero"></div>
     <div class="setup" id="setup"></div>
     <div class="toolbar">
@@ -376,6 +477,9 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
     </div>
     <div class="games" id="lib"></div>
   </div>
+
+  <!-- one game -->
+  <div id="vGame" hidden></div>
 </section>
 </main>
 
@@ -422,6 +526,25 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
   <label id="rTorWrap" hidden><input type="checkbox" id="rTor"> <span id="rTorTxt"></span></label>
   <div class="btns"><button class="ghost" id="rNo">Cancel</button><button id="rYes" style="background:var(--bad);border-color:var(--bad)">Remove</button></div>
 </dialog>
+<dialog id="coldlg" class="mdlg">
+  <div class="fwhead"><h3 id="colTitle">New collection</h3><button class="ghost sm" id="colClose">Close</button></div>
+  <form id="colForm" class="colform">
+    <label>Name<input id="colName" required maxlength="80" placeholder="The Legend of Zelda"></label>
+    <div class="erow2">
+      <label>Title contains (any of)<input id="colKw" placeholder="zelda, link"></label>
+      <label>Leave out titles with<input id="colEx" placeholder="demo, beta"></label>
+    </div>
+    <div class="erow2">
+      <label>Released from<input id="colY1" inputmode="numeric" pattern="\d{4}" placeholder="any"></label>
+      <label>Released up to<input id="colY2" inputmode="numeric" pattern="\d{4}" placeholder="any"></label>
+    </div>
+    <fieldset><legend>Systems <span class="help">(none ticked = all)</span></legend><div class="ticks" id="colSys"></div></fieldset>
+    <fieldset><legend>Genres <span class="help">(none ticked = all)</span></legend><div class="ticks" id="colGen"></div></fieldset>
+    <p class="help" id="colPreview"></p>
+    <div class="btns"><button type="button" class="ghost" id="colDel" style="margin-right:auto;color:var(--bad)" hidden>Delete</button>
+      <button type="button" class="ghost" id="colCancel">Cancel</button><button id="colSave">Save</button></div>
+  </form>
+</dialog>
 <dialog id="cdlg">
   <h3 id="cTitle"></h3>
   <p id="cBody"></p>
@@ -459,14 +582,20 @@ const biosNeed = p => !p.bios ? '' : p.bios_files ? `<span class="pill good">BIO
 
 /* ---------------- tabs ---------------- */
 function show(hash) {
-  let [tab, sub = ''] = (hash || '').split('/');
-  if (!['download','platforms','library'].includes(tab)) tab = 'download', sub = '';
+  const parts = (hash || '').split('/');
+  let tab = parts[0], sub = parts.slice(1).join('/');
+  if (!['download','platforms','library'].includes(tab)) tab = 'library', sub = '';
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   document.querySelectorAll('section.tab').forEach(s => s.classList.toggle('on', s.id === 'tab-' + tab));
   const want = tab + (tab === 'library' && sub ? '/' + sub : '');
   if (location.hash.slice(1) !== want) history.replaceState(null, '', '#' + want);
-  if (tab === 'library' && sub && PLAT.length && !PLAT.some(p => p.slug === sub)) sub = '';
-  if (tab === 'library') { if (!sub) cameFromHome = false; const prev = libPlat; libPlat = sub; if (prev !== sub) { $('#lq').value = ''; window.scrollTo({top: 0}); } LIB.length ? renderLib() : 0; loadLibrary(); }
+  if (tab === 'library') {
+    const prev = JSON.stringify(ROUTE);
+    ROUTE = parseLib(sub ? sub.split('/') : []);
+    libPlat = ROUTE.slug || '';
+    if (prev !== JSON.stringify(ROUTE)) { $('#lq').value = ''; closeMenu(); window.scrollTo({top: 0}); }
+    LIB.length ? renderLib() : 0; loadLibrary();
+  }
   if (tab === 'download') $('#q').focus();
 }
 document.querySelector('nav').onclick = e => { const b = e.target.closest('button'); if (b) show(b.dataset.tab); };
@@ -822,7 +951,7 @@ async function refreshActivity() {
     <p class="help">Peers: connected now, with how many exist in the swarm in brackets.</p>`;
 }
 let LIB = [], CFG = {romm: '', linked: false}, libPlat = '';
-api('api/config').then(c => { CFG = c; if (c.admin) { refreshActivity(); if (LIB.length) renderLib(); } if (c.romm) $('#rommLink').href = c.romm; else $('#rommLink').hidden = true; }).catch(() => {});
+api('api/config').then(c => { CFG = c; if (c.admin) { refreshActivity(); gameKey = ''; if (LIB.length) renderLib(); } if (c.romm) $('#rommLink').href = c.romm; else $('#rommLink').hidden = true; }).catch(() => {});
 const logo = slug => `api/logo/${slug}`;
 const logoImg = (p, cls) => `<img src="${logo(p.slug)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;fallback&quot;>${esc(p.label)}</div>'">`;
 const rommRom = (g, play) => `${CFG.romm}/rom/${g.romm_id}${play ? '/ejs' : ''}`;
@@ -830,53 +959,275 @@ const rommDl = g => `${CFG.romm}/api/roms/${g.romm_id}/content/${encodeURICompon
 const rommPlat = p => p.romm_id ? `${CFG.romm}/platform/${p.romm_id}` : CFG.romm;
 const cleanTitle = g => g.title || g.name.replace(/\.[a-z0-9]{2,4}$/i, '');
 
-async function loadLibrary() {
-  refreshActivity();
-  try { LIB = await api('api/library'); } catch (e) { $('#systems').innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
+let LIBSIG = '';
+async function loadLibrary(quiet) {
+  if (!quiet) refreshActivity();
+  try {
+    const [lib, cols] = await Promise.all([api('api/library'), api('api/collections').catch(() => COLS)]);
+    const sig = JSON.stringify([lib, cols]);
+    if (quiet && sig === LIBSIG) return;          // periodic refresh: don't redraw (keeps scroll positions)
+    LIBSIG = sig; LIB = lib; COLS = cols;
+  } catch (e) { if (!quiet) $('#systems').innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
   renderLib();
 }
-function renderLib() {
-  $('#libHome').hidden = !!libPlat; $('#libPlat').hidden = !libPlat;
-  libPlat ? renderPlatform(P(libPlat)) : renderHome();
+/* ---------------- library: routes ----------------
+   #library                      systems (+ shelves)
+   #library/collections          collections (smart, yours, genres)
+   #library/<slug>               one system
+   #library/c/<id>               one collection
+   #library/game/<slug>/<file>   one game                                  */
+let ROUTE = {view: 'systems'}, COLS = [];
+const dec = x => { try { return decodeURIComponent(x); } catch { return x; } };
+function parseLib(parts) {
+  const [a = '', b = '', c = ''] = parts.map(dec);
+  if (!a) return {view: 'systems'};
+  if (a === 'collections') return {view: 'collections'};
+  if (a === 'c' && b) return {view: 'collection', id: b};
+  if (a === 'game' && b && c) return {view: 'game', slug: b, name: c};
+  if (!PLAT.length || PLAT.some(p => p.slug === a)) return {view: 'system', slug: a};
+  return {view: 'systems'};
+}
+const libHref = (...parts) => '#library' + parts.map(x => '/' + encodeURIComponent(x)).join('');
+const gameHref = g => libHref('game', g.platform, g.name);
+function parentHref() {
+  if (ROUTE.view === 'game') return libHref(ROUTE.slug);
+  if (ROUTE.view === 'collection') return '#library/collections';
+  return '#library';
+}
+let lastLib = '';
+window.addEventListener('hashchange', e => { lastLib = (e.oldURL.split('#')[1] || ''); });
+function goBack() {
+  // Back to where they came from if that was inside the library, else one level up.
+  if (lastLib.startsWith('library')) history.back(); else location.hash = parentHref();
 }
 
-/* home: system tiles + recently added */
-function renderHome() {
-  const counts = {}; LIB.forEach(g => counts[g.platform] = (counts[g.platform] || 0) + 1);
-  const systems = PLAT.filter(p => p.exists || counts[p.slug])
+function renderLib() {
+  const v = ROUTE.view, top = v === 'systems' || v === 'collections';
+  $('#libTabs').hidden = !top; $('#crumbs').hidden = top;
+  document.querySelectorAll('#libTabs a').forEach(a => a.classList.toggle('on', a.dataset.v === v));
+  $('#vSystems').hidden = v !== 'systems'; $('#vCollections').hidden = v !== 'collections';
+  $('#vList').hidden = !(v === 'system' || v === 'collection'); $('#vGame').hidden = v !== 'game';
+  if (v === 'systems') renderSystems();
+  else if (v === 'collections') renderCollections();
+  else if (v === 'system') renderPlatform(P(ROUTE.slug));
+  else if (v === 'collection') renderCollection();
+  else if (v === 'game') renderGame();
+}
+function crumbs(...bits) { $('#crumbTxt').innerHTML = ['Library', ...bits].map((b, i, a) => i === a.length - 1 ? `<b>${esc(b)}</b>` : esc(b)).join(' <i>/</i> '); }
+
+/* ---- systems ---- */
+const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+$('#showAll').checked = lsGet('rs.showAll', '0') === '1';
+$('#showAll').onchange = () => { lsSet('rs.showAll', $('#showAll').checked ? '1' : '0'); renderSystems(); };
+function libCounts() { const c = {}; LIB.forEach(g => c[g.platform] = (c[g.platform] || 0) + 1); return c; }
+function renderSystems() {
+  const counts = libCounts(), all = $('#showAll').checked;
+  const systems = PLAT.filter(p => counts[p.slug] || (all && p.exists))
     .sort((a, b) => (!counts[a.slug]) - (!counts[b.slug]) || a.label.localeCompare(b.label));
+  const hiddenN = PLAT.filter(p => p.exists && !counts[p.slug]).length;
   $('#systems').innerHTML = !systems.length
-    ? '<div class="empty" style="grid-column:1/-1">No systems yet. Add one in <a href="#platforms">Platforms &amp; BIOS</a>.</div>'
-    : systems.map(p => `<button class="sys${counts[p.slug] ? '' : ' empty-sys'}" data-plat="${p.slug}">
+    ? `<div class="empty" style="grid-column:1/-1">${LIB.length ? '' : 'No games yet. Find some in <a href="#download">Download games</a>.'}${!all && hiddenN ? ` ${hiddenN} set-up system${hiddenN === 1 ? '' : 's'} with no games are hidden.` : ''}</div>`
+    : systems.map(p => `<a class="sys${counts[p.slug] ? '' : ' empty-sys'}" href="${libHref(p.slug)}">
         <div class="art">${logoImg(p)}</div>
         <div class="cap"><b>${esc(p.label)}</b>
-          <span><i class="dot" style="background:${p.browser ? 'var(--ok)' : '#8b93a7'}"></i>${counts[p.slug] || 0} game${counts[p.slug] === 1 ? '' : 's'} · ${p.browser ? 'Plays in RomM' : 'Download only'}</span></div>
-      </button>`).join('');
-  const recent = [...LIB].sort((a, b) => b.added - a.added).slice(0, 12);
-  $('#recentWrap').hidden = !recent.length;
-  $('#recent').innerHTML = recent.map(g => gameTile(g, true)).join('');
+          <span><i class="dot" style="background:${p.browser ? 'var(--ok)' : '#8b93a7'}"></i>${counts[p.slug] || 0} game${counts[p.slug] === 1 ? '' : 's'} · ${p.browser ? 'Plays in browser' : 'Download & play'}</span></div>
+      </a>`).join('');
+  // Jellyfin-style shelves under the systems
+  $('#homeShelves').innerHTML = ['s-recent', 's-browser', 's-random'].map(id => shelf(findCollection(id))).join('');
+}
+function shelf(c, limit = 20) {
+  if (!c) return '';
+  const games = c.games().slice(0, limit);
+  if (!games.length) return '';
+  return `<div class="shelfhead"><h2>${esc(c.name)}</h2><a href="${libHref('c', c.id)}">See all →</a></div>
+    <div class="shelf">${games.map(g => gameTile(g, true)).join('')}</div>`;
 }
 
-/* one system: hero, setup (BIOS + emulator), game grid */
+/* ---- collections ---- */
+const seeded = seed => () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
+function dailyShuffle(list) {
+  const r = seeded(Math.floor(Date.now() / 864e5)), a = [...list];
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+const byAdded = (a, b) => b.added - a.added;
+function smartCollections() {
+  const list = [
+    {id: 's-recent', name: 'Recently added', icon: '🆕', desc: 'The newest games in the library', sorted: true, games: () => [...LIB].sort(byAdded).slice(0, 40)},
+    {id: 's-browser', name: 'Play in your browser', icon: '▶', desc: 'No setup: these start right in RomM', games: () => LIB.filter(g => P(g.platform).browser && g.romm_id)},
+    {id: 's-random', name: 'Random picks', icon: '🎲', desc: 'A fresh mix every day', sorted: true, games: () => dailyShuffle(LIB).slice(0, 24)},
+    {id: 's-retro', name: 'Retro classics', icon: '👾', desc: 'Released before 2000', games: () => LIB.filter(g => g.year && g.year < 2000)},
+    {id: 's-2000s', name: 'The 2000s', icon: '💿', desc: 'Released 2000–2009', games: () => LIB.filter(g => g.year >= 2000 && g.year < 2010)},
+    {id: 's-modern', name: 'Modern', icon: '🎮', desc: 'Released 2010 or later', games: () => LIB.filter(g => g.year >= 2010)},
+    {id: 's-big', name: 'Big downloads', icon: '📦', desc: 'Over 4 GB, so start these early', games: () => LIB.filter(g => g.size > 4e9).sort((a, b) => b.size - a.size), sorted: true},
+  ];
+  if (CFG.admin) list.push({id: 's-unmatched', name: 'Needs metadata', icon: '🔎', desc: 'Admins only: not matched in RomM yet. Use ⋮ → Metadata lookup.', games: () => LIB.filter(g => !g.identified)});
+  return list;
+}
+function genreCollections() {
+  const n = {};
+  LIB.forEach(g => (g.genres || []).forEach(x => n[x] = (n[x] || 0) + 1));
+  return Object.keys(n).sort((a, b) => n[b] - n[a] || a.localeCompare(b))
+    .map(x => ({id: 'g-' + x, name: x, genre: true, desc: 'Genre', games: () => LIB.filter(g => (g.genres || []).includes(x))}));
+}
+const gtext = g => (cleanTitle(g) + ' ' + g.name).toLowerCase();
+function matchCol(c, g) {
+  const t = gtext(g);
+  if (c.keywords?.length && !c.keywords.some(k => t.includes(k))) return false;
+  if (c.exclude?.some(k => t.includes(k))) return false;
+  if (c.systems?.length && !c.systems.includes(g.platform)) return false;
+  if (c.genres?.length && !(g.genres || []).some(x => c.genres.includes(x))) return false;
+  if (c.year_from && !(g.year >= c.year_from)) return false;
+  if (c.year_to && !(g.year && g.year <= c.year_to)) return false;
+  return true;
+}
+function colRules(c) {
+  const b = [];
+  if (c.keywords?.length) b.push('title has ' + c.keywords.map(k => `“${k}”`).join(' or '));
+  if (c.exclude?.length) b.push('not ' + c.exclude.map(k => `“${k}”`).join(', '));
+  if (c.systems?.length) b.push(c.systems.map(x => P(x).label).join(', '));
+  if (c.genres?.length) b.push(c.genres.join(', '));
+  if (c.year_from || c.year_to) b.push(c.year_from && c.year_to ? `${c.year_from}–${c.year_to}` : c.year_from ? `${c.year_from} or later` : `up to ${c.year_to}`);
+  return b.join(' · ');
+}
+const customCollections = () => COLS.map(c => ({id: c.id, name: c.name, icon: '★', custom: c, desc: colRules(c), games: () => LIB.filter(g => matchCol(c, g))}));
+const findCollection = id => [...smartCollections(), ...customCollections(), ...genreCollections()].find(c => c.id === id);
+function mosaic(games, icon) {
+  const covers = games.filter(g => g.cover).slice(0, 4);
+  if (!covers.length) return `<div class="mosaic n1"><div class="mph">${icon || '🎮'}</div></div>`;
+  const n = covers.length >= 4 ? 4 : covers.length >= 2 ? 2 : 1;
+  return `<div class="mosaic n${n}">${covers.slice(0, n).map(g => `<img src="${esc(g.cover)}" alt="" loading="lazy">`).join('')}</div>`;
+}
+function ccard(c) {
+  const games = c.games();
+  return `<a class="ccard${games.length ? '' : ' empty-col'}" href="${libHref('c', c.id)}" title="${esc(c.desc || '')}">
+    ${c.custom && CFG.admin ? `<button class="cedit" data-editcol="${esc(c.id)}" title="Edit collection" aria-label="Edit ${esc(c.name)}">✎</button>` : ''}
+    ${mosaic(games, c.icon)}
+    <div class="cap"><b>${esc(c.name)}</b><span>${games.length} game${games.length === 1 ? '' : 's'}</span></div></a>`;
+}
+function renderCollections() {
+  $('#cSmart').innerHTML = smartCollections().filter(c => c.id === 's-recent' || c.games().length).map(ccard).join('');
+  const mine = customCollections();
+  $('#newCol').hidden = !CFG.admin;
+  $('#cCustom').innerHTML = mine.length ? mine.map(ccard).join('')
+    : `<div class="empty" style="grid-column:1/-1">No collections yet.${CFG.admin ? ' Make one with <b>+ New collection</b>: e.g. every game with “zelda” in the title.' : ''}</div>`;
+  const gen = genreCollections();
+  $('#cGenres').innerHTML = gen.length ? gen.map(ccard).join('') : '<div class="empty" style="grid-column:1/-1">Genres appear once games are matched in RomM.</div>';
+}
+function renderCollection() {
+  const c = findCollection(ROUTE.id);
+  if (!c) { crumbs('Collections'); $('#hero').innerHTML = ''; $('#setup').innerHTML = ''; $('#lib').innerHTML = '<div class="empty" style="grid-column:1/-1">That collection doesn’t exist any more. <a href="#library/collections">All collections</a></div>'; return; }
+  crumbs('Collections', c.name);
+  const games = c.games();
+  $('#hero').innerHTML = `${mosaic(games, c.icon)}
+    <div><h3>${esc(c.name)}</h3>
+      <div class="meta"><span>${games.length} game${games.length === 1 ? '' : 's'}</span>${c.desc ? `<span class="pill">${esc(c.desc)}</span>` : ''}</div>
+      ${c.custom && CFG.admin ? `<div class="acts"><button class="sm ghost" data-editcol="${esc(c.id)}">✎ Edit collection</button></div>` : ''}</div>`;
+  $('#setup').innerHTML = '';
+  $('#gamesTitle').textContent = 'Games';
+  renderGrid(games, true, c.sorted);
+}
+function renderGrid(games, showPlat, keepOrder) {
+  const f = $('#lq').value.trim().toLowerCase(), sort = $('#lsort').value;
+  let rows = games.filter(g => !f || gtext(g).includes(f));
+  if (!(keepOrder && sort === 'name' && !$('#lsort').dataset.touched))
+    rows = rows.sort(sort === 'added' ? byAdded : sort === 'year' ? (a, b) => (b.year || 0) - (a.year || 0) : (a, b) => cleanTitle(a).localeCompare(cleanTitle(b)));
+  $('#lib').innerHTML = !games.length ? '<div class="empty" style="grid-column:1/-1">Nothing here yet.</div>'
+    : !rows.length ? '<div class="msg" style="grid-column:1/-1">No games match.</div>'
+    : rows.map(g => gameTile(g, showPlat)).join('');
+}
+
+/* ---- one system ---- */
 function renderPlatform(p) {
   const games = LIB.filter(g => g.platform === p.slug);
-  $('#crumbName').textContent = p.label;
+  crumbs('Systems', p.label);
   $('#hero').innerHTML = `<div class="logo">${logoImg(p)}</div>
     <div><h3>${esc(p.label)}</h3>
       <div class="meta"><span>${games.length} game${games.length === 1 ? '' : 's'}</span>
         ${p.browser ? '<span class="pill good">▶ RomM compatible</span>' : '<span class="pill">Download only</span>'}
         <a class="btn ghost" href="${rommPlat(p)}" target="_blank" rel="noopener">Open in RomM ↗</a></div></div>`;
   $('#setup').innerHTML = setupBoxes(p);
-  $('#gamesTitle').textContent = `Games`;
-  const f = $('#lq').value.trim().toLowerCase(), sort = $('#lsort').value;
-  const rows = games.filter(g => !f || cleanTitle(g).toLowerCase().includes(f) || g.name.toLowerCase().includes(f))
-    .sort(sort === 'added' ? (a, b) => b.added - a.added
-        : sort === 'year' ? (a, b) => (b.year || 0) - (a.year || 0)
-        : (a, b) => cleanTitle(a).localeCompare(cleanTitle(b)));
-  $('#lib').innerHTML = !games.length
-    ? `<div class="empty" style="grid-column:1/-1">No ${esc(p.label)} games yet. Find some in <a href="#download">Download games</a>.</div>`
-    : !rows.length ? '<div class="msg" style="grid-column:1/-1">No games match.</div>'
-    : rows.map(g => gameTile(g, false)).join('');
+  $('#gamesTitle').textContent = 'Games';
+  if (!games.length) { $('#lib').innerHTML = `<div class="empty" style="grid-column:1/-1">No ${esc(p.label)} games yet. Find some in <a href="#download">Download games</a>.</div>`; return; }
+  renderGrid(games, false);
+}
+
+/* ---- one game ---- */
+const BIOSF = {};
+async function biosFiles(slug) {
+  if (BIOSF[slug] && Date.now() - BIOSF[slug].t < 60000) return BIOSF[slug].files;
+  try { const files = await api('api/bios-files?platform=' + encodeURIComponent(slug)); BIOSF[slug] = {t: Date.now(), files}; return files; }
+  catch { return BIOSF[slug]?.files || null; }
+}
+const RETROARCH = {name: 'RetroArch', url: 'https://www.retroarch.com/?page=platforms'};
+let gameKey = '';
+function renderGame() {
+  const g = LIB.find(x => x.platform === ROUTE.slug && x.name === ROUTE.name);
+  const p = P(ROUTE.slug);
+  if (!g) { crumbs(p.label); $('#vGame').innerHTML = `<div class="empty">This game isn’t in the library any more. <a href="${libHref(p.slug)}">Back to ${esc(p.label)}</a></div>`; return; }
+  const t = cleanTitle(g);
+  crumbs(p.label, t);
+  const key = gkey(g) + '|' + (g.title || '') + '|' + (g.cover || '') + '|' + (g.romm_id || '') + '|' + p.bios_files;
+  const scanned = !!g.romm_id, canPlay = p.browser && scanned;
+  const meta = [g.year, ...(g.genres || []).slice(0, 4)].filter(Boolean);
+  const emus = p.emulators?.length ? p.emulators : [RETROARCH];
+  const primary = !scanned ? `<span class="pill soft">RomM is still adding this game</span>`
+    : canPlay ? `<a class="btn big play" href="${rommRom(g, true)}" target="_blank" rel="noopener">▶ Play in browser</a>`
+              : `<a class="btn big" href="${rommDl(g)}">⬇ Download game</a>`;
+  const kebab = CFG.admin ? `<button class="kebab inline" data-gk="${esc(gkey(g))}" aria-label="Manage ${esc(t)}" aria-haspopup="menu" title="Manage game">⋮</button>` : '';
+  const more = LIB.filter(x => x.platform === g.platform && x !== g);
+  const html = `<div class="gpage">
+    <div class="gtop">${g.cover ? `<div class="bd" style="background-image:url('${esc(g.cover)}')"></div>` : ''}
+      <div class="in">
+        <div class="gcover">${g.cover ? `<img src="${esc(g.cover)}" alt="">` : `<div class="ph"><img src="${logo(p.slug)}" alt="" onerror="this.remove()"><b>${esc(t)}</b></div>`}</div>
+        <div class="ginfo">
+          <a class="sysl" href="${libHref(p.slug)}"><img src="${logo(p.slug)}" alt="" onerror="this.remove()">${esc(p.label)}</a>
+          <h1>${esc(t)}</h1>
+          ${meta.length ? `<div class="gmeta">${meta.map(m => `<span>${esc(m)}</span>`).join('')}</div>` : ''}
+          ${g.summary ? `<p class="gsum clamp" id="gsum">${esc(g.summary)}</p><button class="more" id="gmore" hidden>Read more</button>` : (scanned && !g.identified ? '<p class="gsum" style="color:var(--muted)">No description yet.</p>' : '')}
+          <div class="gact">${primary}${kebab}</div>
+        </div>
+      </div>
+    </div>
+    <div class="gsteps">
+      <section class="step ok"><h3><span class="n">1</span>Game</h3>
+        <p>${esc(g.fs_name || g.name)}<br>${size(g.size)}${g.files > 1 ? ` · ${g.files} files` : ''}</p>
+        ${!scanned ? '<p>RomM picks new games up within a few minutes; refresh shortly.</p>'
+          : `<div class="row">${canPlay ? `<a class="btn play" href="${rommRom(g, true)}" target="_blank" rel="noopener">▶ Play in browser</a>` : ''}
+              <a class="btn${canPlay ? ' ghost' : ''}" href="${rommDl(g)}">⬇ Download${canPlay ? ' file' : ''}</a>
+              <a class="btn ghost" href="${rommRom(g)}" target="_blank" rel="noopener">RomM page ↗</a></div>
+             <p class="help">Downloads come from RomM, so sign in there first if it asks.</p>`}
+      </section>
+      <section class="step"><h3><span class="n">2</span>Emulator</h3>
+        <p>${p.browser ? `Not needed to play in the browser. To play offline, use ${emus.map(e => esc(e.name)).join(' or ')}.`
+                       : `${esc(p.label)} games need an emulator. Install ${emus.map(e => esc(e.name)).join(' or ')}, then open the downloaded game in it.`}</p>
+        <div class="row">${emus.map(e => `<a class="btn${p.browser ? ' ghost' : ''}" href="${esc(e.url)}" target="_blank" rel="noopener">Get ${esc(e.name)} ↗</a>`).join('')}</div>
+      </section>
+      <section class="step${!p.bios || p.bios_files ? ' ok' : ''}" id="gbios"><h3><span class="n">3</span>BIOS</h3>${biosStep(p, null)}</section>
+    </div>
+    ${more.length ? `<div class="shelfhead"><h2>More ${esc(p.label)}</h2><a href="${libHref(p.slug)}">See all →</a></div>
+      <div class="shelf">${dailyShuffle(more).slice(0, 16).map(x => gameTile(x, false)).join('')}</div>` : ''}
+  </div>`;
+  if (key === gameKey && $('#vGame').firstElementChild) return;     // nothing changed: keep scroll/expanded text
+  gameKey = key;
+  $('#vGame').innerHTML = html;
+  const sum = $('#gsum');
+  if (sum && sum.scrollHeight > sum.clientHeight + 4) { $('#gmore').hidden = false; $('#gmore').onclick = () => { sum.classList.toggle('clamp'); $('#gmore').textContent = sum.classList.contains('clamp') ? 'Read more' : 'Show less'; }; }
+  if (p.bios && p.bios_files) biosFiles(p.slug).then(files => { if ($('#gbios') && ROUTE.slug === p.slug) $('#gbios').innerHTML = `<h3><span class="n">3</span>BIOS</h3>` + biosStep(p, files); });
+}
+function biosStep(p, files) {
+  if (!p.bios) return `<p>${esc(p.label)} doesn't need a BIOS. Nothing to do here.</p>`;
+  const tag = `<span class="pill ${p.bios_files ? 'good' : p.bios === 'required' ? 'need' : 'soft'}">${p.bios_files ? 'Available ✓' : 'BIOS ' + esc(p.bios)}</span>`;
+  const note = p.bios_note ? `<p>${esc(p.bios_note)}</p>` : '';
+  if (!p.bios_files) return `<div class="row">${tag}</div>${note}
+    ${CFG.admin ? `<div class="row">${p.bios_official ? `<a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a>` : `<button class="sm" data-bios="${p.slug}">Find BIOS</button>`}
+        <button class="sm ghost" data-upload="${p.slug}">Upload firmware</button></div>` : '<p>An admin needs to add it before this system will run.</p>'}`;
+  const list = files === null ? '<p class="help">Loading files…</p>'
+    : !files.length ? `<div class="row"><a class="btn ghost" href="${rommPlat(p)}" target="_blank" rel="noopener">Get it from RomM ↗</a></div>`
+    : `<div class="flist">${files.map(f => `<a href="${CFG.romm}${f.path}" download><b>${esc(f.name)}</b><span>${size(f.size)}</span></a>`).join('')}</div>
+       <p class="help">${files.length} file${files.length === 1 ? '' : 's'}. Put ${files.length === 1 ? 'it' : 'them'} in your emulator's BIOS / system folder.</p>`;
+  return `<div class="row">${tag}${CFG.admin ? `<button class="sm ghost" data-managefw="${p.slug}">Manage</button>` : ''}</div>${note}${list}`;
 }
 function setupBoxes(p) {
   const boxes = [];
@@ -918,23 +1269,18 @@ function gameTile(g, showPlat) {
     ? `<img class="blur" src="${esc(g.cover)}" alt="" loading="lazy" aria-hidden="true"><img class="art" src="${esc(g.cover)}" alt="" loading="lazy" onerror="this.previousElementSibling.remove();this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',innerHTML:'<b>${esc(t).replace(/'/g, '&#39;')}</b>'}))">`
     : `<div class="ph"><img src="${logo(p.slug)}" alt="" onerror="this.remove()"><b>${esc(t)}</b></div>`;
   const kebab = CFG.admin ? `<button class="kebab" data-gk="${esc(gkey(g))}" aria-label="Manage ${esc(t)}" aria-haspopup="menu" title="Manage game">⋮</button>` : '';
-  return `<div class="game" title="${esc(g.summary || t)}">
-    <div class="cover">${kebab}${cover}${showPlat ? `<span class="badge">${esc(p.label)}</span>` : ''}</div>
-    <div class="info"><b>${esc(t)}</b>${meta ? `<span>${esc(meta)}</span>` : ''}
+  return `<div class="game">
+    <div class="cover"><a class="cl" href="${gameHref(g)}" aria-label="${esc(t)}"></a>${kebab}${cover}${showPlat ? `<span class="badge">${esc(p.label)}</span>` : ''}</div>
+    <div class="info"><a class="tl" href="${gameHref(g)}"><b>${esc(t)}</b></a>${meta ? `<span>${esc(meta)}</span>` : ''}
       <div class="foot"><span class="sz">${size(g.size)}</span>${act}</div></div>
   </div>`;
 }
-$('#systems').onclick = e => { const b = e.target.closest('[data-plat]'); if (b) openSystem(b.dataset.plat); };
-// Systems are real URLs (#library/<slug>), so the browser Back button and links work too.
-let cameFromHome = false;
-function openSystem(slug) { cameFromHome = true; location.hash = 'library/' + slug; }
-function backToSystems() { if (cameFromHome) history.back(); else location.hash = 'library'; }
-$('#libBack').onclick = backToSystems;
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && libPlat && !document.querySelector('dialog[open]') && $('#tab-library').classList.contains('on')) backToSystems(); });
+$('#libBack').onclick = goBack;
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#crumbs').hidden && !document.querySelector('dialog[open]') && $('#gmenu').hidden && $('#tab-library').classList.contains('on')) goBack(); });
 const setHdr = () => document.documentElement.style.setProperty('--hdr', document.querySelector('header').offsetHeight + 'px');
 addEventListener('resize', setHdr); setHdr();
-$('#setup').onclick = e => { const b = e.target.closest('[data-bios]'); if (b) openBios(b.dataset.bios); };
-$('#lq').oninput = renderLib; $('#lsort').onchange = renderLib;
+document.addEventListener('click', e => { const b = e.target.closest('#setup [data-bios], #vGame [data-bios]'); if (b) openBios(b.dataset.bios); });
+$('#lq').oninput = renderLib; $('#lsort').onchange = () => { $('#lsort').dataset.touched = '1'; renderLib(); };
 
 /* ---------------- cancel a download ---------------- */
 $('#activity').addEventListener('click', async e => {
@@ -980,7 +1326,7 @@ document.addEventListener('click', e => {
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#gmenu').hidden) { const b = menuFor; closeMenu(); b?.focus(); e.stopImmediatePropagation(); } }, true);
 addEventListener('resize', closeMenu);
 
-async function reloadLib() { try { LIB = await api('api/library'); renderLib(); } catch (e) {} }
+async function reloadLib() { gameKey = ''; await loadLibrary(true); }
 
 function gameAction(act, g) {
   if (act === 'lookup') return openLookup(g);
@@ -1089,10 +1435,69 @@ $('#rYes').onclick = async () => {
   finally { $('#rYes').disabled = false; }
 };
 
+/* ---------------- collection editor (admins) ---------------- */
+let colEditing = null;
+const csv = v => v.split(',').map(x => x.trim()).filter(Boolean);
+function colDraft() {
+  return {id: colEditing?.id || '', name: $('#colName').value.trim(), keywords: csv($('#colKw').value.toLowerCase()),
+    exclude: csv($('#colEx').value.toLowerCase()), year_from: +$('#colY1').value || null, year_to: +$('#colY2').value || null,
+    systems: [...document.querySelectorAll('#colSys input:checked')].map(i => i.value),
+    genres: [...document.querySelectorAll('#colGen input:checked')].map(i => i.value)};
+}
+function colPreview() {
+  const d = colDraft();
+  const any = d.keywords.length || d.systems.length || d.genres.length || d.year_from || d.year_to;
+  if (!any) { $('#colPreview').textContent = 'Add a keyword, system, genre or year to choose games.'; return; }
+  const hits = LIB.filter(g => matchCol(d, g));
+  $('#colPreview').innerHTML = `<b style="color:var(--text)">${hits.length} game${hits.length === 1 ? '' : 's'} match now</b>${hits.length ? ': ' + hits.slice(0, 8).map(g => esc(cleanTitle(g))).join(', ') + (hits.length > 8 ? '…' : '') : ''}. New downloads that match join automatically.`;
+}
+function openColEditor(c) {
+  colEditing = c || null;
+  $('#colTitle').textContent = c ? 'Edit collection' : 'New collection';
+  $('#colName').value = c?.name || '';
+  $('#colKw').value = (c?.keywords || []).join(', ');
+  $('#colEx').value = (c?.exclude || []).join(', ');
+  $('#colY1').value = c?.year_from || ''; $('#colY2').value = c?.year_to || '';
+  const counts = libCounts();
+  const sys = PLAT.filter(p => counts[p.slug] || p.exists || c?.systems?.includes(p.slug)).sort((a, b) => a.label.localeCompare(b.label));
+  $('#colSys').innerHTML = sys.map(p => `<label><input type="checkbox" value="${p.slug}"${c?.systems?.includes(p.slug) ? ' checked' : ''}>${esc(p.label)}</label>`).join('') || '<span class="help">No systems yet.</span>';
+  const gens = [...new Set([...genreCollections().map(x => x.name), ...(c?.genres || [])])].sort();
+  $('#colGen').innerHTML = gens.map(x => `<label><input type="checkbox" value="${esc(x)}"${c?.genres?.includes(x) ? ' checked' : ''}>${esc(x)}</label>`).join('') || '<span class="help">Genres appear once games are matched.</span>';
+  $('#colDel').hidden = !c;
+  colPreview();
+  $('#coldlg').showModal(); $('#colName').focus();
+}
+$('#colForm').addEventListener('input', colPreview);
+$('#colClose').onclick = $('#colCancel').onclick = () => $('#coldlg').close();
+$('#newCol').onclick = () => openColEditor(null);
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-editcol]'); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const c = COLS.find(x => x.id === b.dataset.editcol); if (c) openColEditor(c);
+}, true);
+$('#colForm').onsubmit = async e => {
+  e.preventDefault();
+  $('#colSave').disabled = true;
+  try {
+    const c = await api('api/collections', colDraft());
+    $('#coldlg').close(); toast(`Collection “${c.name}” saved`, 'good');
+    await loadLibrary(true);
+    if (!colEditing) location.hash = libHref('c', c.id);
+  } catch (err) { toast(err.message, 'bad'); }
+  finally { $('#colSave').disabled = false; }
+};
+$('#colDel').onclick = async () => {
+  const c = colEditing; if (!c) return;
+  $('#coldlg').close();
+  if (!await confirmBox(`Delete “${c.name}”?`, 'Only the collection goes; the games stay in the library.', 'Delete', 'Keep')) return;
+  try { await api('api/collections/delete', {id: c.id}); toast('Collection deleted', 'good'); if (ROUTE.id === c.id) location.hash = '#library/collections'; await loadLibrary(true); }
+  catch (err) { toast(err.message, 'bad'); }
+};
+
 /* ---------------- start ---------------- */
 loadPlatforms().then(() => show(location.hash.slice(1)));
 refreshActivity();
-setInterval(() => { refreshActivity(); if ($('#tab-library').classList.contains('on')) api('api/library').then(d => { LIB = d; renderLib(); }).catch(() => {}); }, 10000);
+setInterval(() => { refreshActivity(); if ($('#tab-library').classList.contains('on')) loadLibrary(true); }, 10000);
 setInterval(loadPlatforms, 30000);
 </script>
 </body>

@@ -6,7 +6,11 @@ A small web app that adds a "Sonarr/Radarr for games" workflow on top of [RomM](
 
 - **Download games:** search your [Prowlarr](https://prowlarr.com) indexers (Console category), pick the platform, and grab. Torrents go to qBittorrent.
 - **Platforms & BIOS:** set up RomM platforms, and search for/grab BIOS firmware for the ones that need it.
-- **Library:** see what's downloading and what's in RomM, per platform. Browser-playable games link straight to RomM's player; download-only platforms (PS2, GameCube, …) link to the game's RomM page and the official emulator download.
+- **Library** (the start page): systems that have games, with shelves for Recently added, Play in your browser and Random picks, plus a **Collections** tab:
+  - **Smart collections:** recently added, browser-playable, retro, 2000s, modern, big downloads, and *Needs metadata* (admins only).
+  - **Genres:** one per genre RomM knows.
+  - **Your collections:** admins build these from rules (title keywords, exclusions, systems, genres, years), e.g. every game with "zelda" in the title. They update themselves as games arrive (`state/collections.json`).
+  - **Game pages:** each game has its own page with three separate steps: the game (Play in browser / Download), the emulator to install, and the BIOS files (downloaded from RomM).
 
 Finished downloads are hardlinked into RomM's library (`roms/<platform>/`, firmware in `bios/<platform>/`), and RomM's filesystem watcher picks them up.
 
