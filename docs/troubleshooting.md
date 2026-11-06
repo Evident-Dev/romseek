@@ -28,6 +28,18 @@ Downloads and the library are on different drives, so RomSeek copies instead of 
 **Permission denied in the log.**
 The `user:` in your compose file can't write to the library or `state` folder. Redo the ownership check in [Step 5](setup.md#step-5-check-your-folders).
 
+**The Edit ROMs box is missing when making the RomM token.**
+RomM only offers it to Admin accounts. See the note in [Step 8](setup.md#step-8-link-romm-recommended).
+
+**Metadata lookup finds nothing.**
+RomM has no metadata source turned on that has data. LaunchBox needs its local database: set `ENABLE_SCHEDULED_UPDATE_LAUNCHBOX_METADATA=true` in RomM and run the **Update LaunchBox metadata** task once. Then try the full official title, or one of the **Try:** suggestions.
+
+**Admin actions say "RomM refused".**
+The RomM token is missing **Edit ROMs**. Make a new token with it, put it in `romseek.env`, and run `docker compose up -d romseek`.
+
+**A save made on one device isn't there on another.**
+Saves are stored in RomM, not RomSeek. RomM loads the newest save when the play page opens, so a RomM tab left open from before the save won't know about it. Reload the page (or use RomSeek's ▶ Play, which always opens a fresh one) before you press Play.
+
 **A result has the wrong system.**
 Pick the right one before you grab. RomSeek remembers your choice for that title next time.
 

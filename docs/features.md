@@ -1,5 +1,21 @@
 # Features
 
+## Library
+
+The Library is the first page RomSeek opens.
+
+- **Systems:** one tile per system that has games, A–Z. Systems with no games are hidden; tick **Show all platforms** to show them (greyed out). Below the systems are rows for **Recently added**, **Play in your browser** and **Random picks** (a new mix each day).
+- **Collections:** see [Collections](#collections).
+- **Game pages:** click any game for its own page with three separate steps:
+  1. **Game:** ▶ Play in browser (systems RomM can run) or ⬇ Download.
+  2. **Emulator:** what to install for that system, with a download link. Browser systems point to RetroArch for offline play.
+  3. **BIOS:** "not needed", or the BIOS files to download straight from RomM.
+
+  Downloads and BIOS files come from RomM, so users need to be signed in to RomM.
+- **Pending downloads** sit at the top of the Library while anything is downloading or waiting for the virus scan. Admins can cancel a download that hasn't finished with the **✕** at the end of its row. Once it's finished and waiting for the scan, it can't be cancelled.
+
+Every page has its own address (`#library/<system>`, `#library/c/<collection>`, `#library/game/<system>/<file>`), so the browser's Back button and bookmarks work. **Esc** goes back.
+
 ## Admin tools and extras
 
 ### Admin menu
@@ -7,6 +23,8 @@
 Users in the `admins` group get a ⋮ menu on each game. The group comes from your login proxy's `Remote-Groups` header. Change it with `ADMIN_GROUPS`.
 
 - **Metadata lookup:** search every metadata source RomM has turned on, and pick the right match.
+  - If a name finds nothing, RomSeek retries with the closest real titles from its title list and shows them as **Try:** suggestions.
+  - Files named by disc or product ID (`RZDP01.wbfs` for Wii/GameCube, `BLUS30443` for PS3) are translated with [GameTDB](https://www.gametdb.com) title lists, which also give a cover.
 - **Edit details:** set the title, year, genres, cover and description by hand.
 - **Clear metadata** and **Remove game.** Remove deletes the file and the RomM entry. It can also delete the torrent.
 
@@ -57,7 +75,7 @@ Open **Library → Collections**.
 4. **Check files (optional).** The **Check files** button reads a torrent's file list from peers without downloading it. It needs live peers. A **size?** badge means the result is too big for one game on that system.
 5. **Import.** Every 60 seconds it looks at finished downloads. It runs the safety checks, waits for the virus scan if you set one, then links the files into `roms/<system>/` or `bios/<system>/`. RomM picks them up from there.
 
-RomSeek keeps its own data in the `state` folder: download status, learned systems, collections and the title list.
+RomSeek keeps its own data in the `state` folder: download status, learned systems, collections, the title list and the GameTDB ID lists.
 
 ---
 

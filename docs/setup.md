@@ -164,6 +164,9 @@ This turns on the Library page, game pages and the admin menu.
 2. Create a token with these permissions:
    - **View ROMs** and **View platforms** (needed for the Library)
    - **Edit ROMs** (only if admins should fix metadata or remove games)
+
+   > 💡 RomM only offers **Edit ROMs** to accounts with the **Admin** role. If the box isn't there, have a RomM admin set your account to Admin (**Settings → Users**), sign out and back in, then make the token again. You can't add permissions to an existing token.
+
 3. Paste the token into `romseek.env` after `ROMM_API_TOKEN=`.
 4. Set `ROMM_PUBLIC_URL` to the address your users open for RomM, like `https://romm.example.com`.
 5. Restart: `docker compose up -d romseek`.
