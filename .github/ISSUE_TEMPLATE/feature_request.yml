@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest something new for RomSeek.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What should RomSeek do?
+    validations:
+      required: true
+  - type: textarea
+    id: other
+    attributes:
+      label: Anything else?
+      description: Other tools that do this, screenshots, links.
