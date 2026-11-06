@@ -19,19 +19,20 @@ RomSeek is a game download manager for [RomM](https://github.com/rommapp/romm). 
 - Library view by system, genre and auto-updating collections
 - Game pages with three steps: get the game, get the emulator, get the BIOS
 - Admin tools to fix metadata, edit details and remove games
+- Users and groups: sign in with RomSeek accounts, LLDAP, or your SSO proxy (Authelia, Authentik). Choose which platforms and game ratings each group sees, and who can download
 - Dashboard stats for [Homepage](https://gethomepage.dev)
 - One Python file with no dependencies. Runs on the stock `python:3.12-alpine` image.
 
 ## Getting Started
 
-You need RomM, Prowlarr, qBittorrent and a reverse proxy with a login, all in Docker.
+You need RomM, Prowlarr, qBittorrent and a reverse proxy, all in Docker.
 
 1. Clone this repo into your compose project folder.
 2. Copy `.env.example` to `romseek.env` and add your Prowlarr API key.
 3. Add the service from `docker-compose.example.yml` to your compose file.
-4. Start it and put it behind your proxy's login.
+4. Start it, put it behind your proxy, and create the admin account with the setup code from `docker logs romseek`. Or turn on LLDAP or SSO sign-in.
 
-> ⚠️ RomSeek has no login of its own. Never open its port to the internet.
+> ⚠️ Never open RomSeek's port straight to the internet. Put it behind your reverse proxy with HTTPS.
 
 The full guide takes about 20 minutes: **[Setup guide](docs/setup.md)**
 

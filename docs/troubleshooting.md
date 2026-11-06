@@ -46,6 +46,18 @@ Pick the right one before you grab. RomSeek remembers your choice for that title
 **PC games show up in results.**
 Some indexers mark PC games as Console. Results with no known system sort last. Use `EXCLUDED_INDEXERS` to hide a bad indexer.
 
+**RomSeek shows its own sign-in page even though I signed in through Authelia.**
+Either `PROXY_AUTH=true` isn't set in `romseek.env`, or the proxy isn't passing the user header. Check the `copy_headers` / `authResponseHeaders` line in [Step 7](setup.md#option-c-sso-proxy-forward-auth).
+
+**I upgraded and now RomSeek asks for a setup code.**
+RomSeek used to rely on the proxy alone. If you run it behind Authelia or Authentik, add `PROXY_AUTH=true` to `romseek.env` and restart. Otherwise, create the admin with the code from `docker logs romseek`.
+
+**Someone can't see a game that's in the library.**
+Their groups hide that platform or rating. Check their groups under **Users**. New downloads count as Unrated until RomM matches them.
+
+**Forgot the admin password.**
+See [Locked out?](setup.md#locked-out).
+
 **Still stuck?**
 Ask in [Discussions → Q&A](https://github.com/Evident-Dev/romseek/discussions/categories/q-a). Include your RomSeek log (`docker logs --tail 100 romseek`) with keys and tokens removed.
 

@@ -9,9 +9,9 @@ You need these already running in Docker:
 - [ ] **RomM** 5.3 or newer
 - [ ] **Prowlarr** with at least one indexer that returns Console results
 - [ ] **qBittorrent** (any version with the WebUI)
-- [ ] **A reverse proxy with a login**, like Caddy or Traefik with Authelia or Authentik
+- [ ] **A reverse proxy with HTTPS**, like Caddy or Traefik. Optional: Authelia, Authentik or LLDAP for single sign-on.
 
-> ⚠️ RomSeek has no login of its own. Never open its port to the internet. Always put it behind your proxy's login.
+> ⚠️ Never open RomSeek's port straight to the internet. Put it behind your reverse proxy.
 
 All containers must be on the same Docker network, so they can reach each other by name.
 
@@ -145,12 +145,70 @@ docker logs -f romseek
 
 The log should show no errors. On first start RomSeek creates a `roms` category in qBittorrent and downloads its game title list (about 2.5 MB).
 
-### Step 7. Put it behind your proxy
+### Step 7. Choose how people sign in
 
-RomSeek has no login screen and no settings page. Your reverse proxy handles
-the login, and all settings live in `romseek.env` (see [Configuration](configuration.md)).
+RomSeek has its own sign-in, users and groups. Pick one way in (you can combine them):
 
-#### How login and admin work
+| Option | Best for | Set in `romseek.env` |
+|---|---|---|
+| **A. RomSeek accounts** | No SSO. You make an account for each person. | nothing |
+| **B. LLDAP** | You run [LLDAP](https://github.com/lldap/lldap) but no SSO proxy. People use their LLDAP password. | `LLDAP_URL` |
+| **C. SSO proxy** | Authelia, Authentik or similar forward auth in front of RomSeek. People are added on their first visit. | `PROXY_AUTH=true` |
+
+All settings live in `romseek.env` (see [Configuration](configuration.md)). Users and groups are managed in the **Users** tab.
+
+#### First admin (options A and B)
+
+On a fresh install RomSeek asks you to create the admin account. To prove you
+own the server it needs a one-time **setup code** from the log:
+
+```bash
+docker logs romseek 2>&1 | grep -A1 "setup code"
+```
+
+It's also in `state/setup-code.txt`. Open RomSeek, enter the code, pick a
+username and password, and you're signed in as admin. The code changes on every
+restart until setup is done. With option C there's no setup step: members of
+`ADMIN_GROUPS` are admins.
+
+> ⚠️ Even with its own sign-in, RomSeek is safest behind a reverse proxy with
+> HTTPS. Don't publish its port straight to the internet.
+
+#### Option A. RomSeek accounts
+
+Nothing to set. After the first admin, open **Users → + New user** to add
+people with a username and password. Anyone can change their own password from
+the menu under their name.
+
+#### Option B. LLDAP
+
+```ini
+LLDAP_URL=http://lldap:17170
+```
+
+The sign-in form now also accepts LLDAP usernames and passwords. The person's
+LLDAP groups come with them, so someone in `admins` (or any group in
+`ADMIN_GROUPS`) is an admin. If no LLDAP admin exists yet, make a RomSeek admin
+with the setup code first.
+
+People appear in **Users** once they first sign in. To list everyone ahead of
+time, make an LLDAP user in the `lldap_strict_readonly` group and add:
+
+```ini
+LLDAP_SYNC_USER=romseek
+LLDAP_SYNC_PASSWORD=...
+```
+
+RomSeek then syncs every 15 minutes (`LLDAP_SYNC_MINUTES`), and removes people
+you delete from LLDAP.
+
+#### Option C. SSO proxy (forward auth)
+
+```ini
+PROXY_AUTH=true
+```
+
+How it works:
 
 1. Someone opens `https://roms.example.com`.
 2. Your proxy asks your login service (Authelia here) whether they are signed in.
@@ -165,15 +223,15 @@ the login, and all settings live in `romseek.env` (see [Configuration](configura
    | `Remote-Groups` | `admins,family` |
 
 4. The proxy copies those headers onto the request it passes to RomSeek.
-5. RomSeek reads `Remote-Groups`. If one of the groups is in `ADMIN_GROUPS`
-   (default `admins`), that person gets the admin tools.
+5. RomSeek adds the user on their first visit and keeps their groups in step
+   with the proxy. Members of a group in `ADMIN_GROUPS` (default `admins`) are admins.
 
-Nothing has to "trigger" the admin header. It comes with every request from a
-signed-in user. To make someone an admin, put them in the `admins` group in
-Authelia (for example `groups: [admins]` in `users_database.yml`, or the
-matching LDAP group), or set `ADMIN_GROUPS` to a group you already use.
+> ⚠️ With `PROXY_AUTH=true`, RomSeek believes whatever `Remote-User` header it
+> gets. Only turn it on when the proxy is the **only** way to reach RomSeek
+> (no published port) and the proxy runs forward auth on every request. Anyone
+> who can reach the port directly could sign in as anyone.
 
-#### Caddy + Authelia
+##### Caddy + Authelia
 
 ```
 (authelia) {
@@ -189,10 +247,10 @@ roms.example.com {
 }
 ```
 
-> ⚠️ The `copy_headers` line matters. Without it you still get the login page,
-> but RomSeek never sees any groups, so nobody gets the admin tools.
+> ⚠️ The `copy_headers` line matters. Without it you still get Authelia's login
+> page, but RomSeek never learns who you are and shows its own sign-in instead.
 
-#### Traefik + Authelia
+##### Traefik + Authelia
 
 Labels on the `romseek` service:
 
@@ -208,37 +266,65 @@ labels:
   - traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email
 ```
 
-#### Authentik
+##### Authentik
 
-Login works through Authentik's proxy outpost, but Authentik names its headers
-differently (`X-authentik-groups`, with groups separated by `|`). RomSeek only
-reads `Remote-Groups` for now, so the admin tools won't show up with Authentik.
+Use Authentik's proxy outpost, and tell RomSeek Authentik's header names
+(groups separated by `|` work too):
+
+```ini
+PROXY_AUTH=true
+PROXY_USER_HEADER=X-authentik-username
+PROXY_GROUPS_HEADER=X-authentik-groups
+PROXY_NAME_HEADER=X-authentik-name
+PROXY_EMAIL_HEADER=X-authentik-email
+```
 
 #### Check it
 
-Reload your proxy and open `https://roms.example.com`. You should see the login
-page first, then RomSeek. Then open `https://roms.example.com/api/config`:
+Open `https://roms.example.com`. You should land in RomSeek signed in (option
+C) or see its sign-in page (A and B). The menu under your name, top right,
+shows your username, groups and whether you're an admin. Admins also get a
+**Users** tab.
 
-- `"admin": true` means your groups came through and you're an admin.
-- `"admin": false` for an admin account means the groups header isn't reaching
-  RomSeek. Check the `copy_headers` / `authResponseHeaders` line and the user's
-  groups in Authelia.
+If an SSO admin shows up without admin rights, the groups header isn't reaching
+RomSeek: check the `copy_headers` / `authResponseHeaders` line and the user's
+groups in your login service.
 
-#### Who can do what
+#### Groups and permissions
 
-| | Anyone who can sign in | Admins only |
-|---|---|---|
-| Browse the library, play, download | ✅ | |
-| Search and grab downloads | ✅ | |
-| Add systems, upload or delete BIOS files | ✅ | |
-| Fix metadata, edit or remove games | | ✅ |
-| Make or delete collections | | ✅ |
-| Cancel downloads | | ✅ |
+Open **Users**. Each group card sets:
 
-> ⚠️ Searching and grabbing start real downloads, and anyone who can get past
-> your login can do them. Limit who can open RomSeek in your login service.
-> With Authelia, use an access rule like `subject: 'group:admins'` for
-> `roms.example.com`.
+- **Download new games:** search and grab games. Off hides the **Download games** tab.
+- **Add platforms and download/upload BIOS:** set up new systems and manage BIOS files.
+- **Platforms they see:** which systems show in the Library and Platforms tabs.
+- **Game ratings they see:** E, E10+, T, M, AO, Unrated. Ratings come from
+  RomM's metadata (IGDB); other boards like PEGI are matched to the nearest
+  tier. Games RomM hasn't matched yet count as **Unrated**.
+- **Admin:** everything, plus managing users, metadata, collections and downloads.
+
+How they combine:
+
+- Someone in several groups gets everything any of them allows.
+- People in no set-up group get **Default**. On a fresh install, Default sees
+  everything and can download games but can't add platforms or BIOS.
+- Groups from LLDAP or your SSO appear automatically. Until you save settings
+  for one, its members get Default. You can also make RomSeek-only groups and
+  tick them on any user.
+
+Hiding a platform or rating only hides those games in RomSeek. It doesn't stop
+anyone downloading: if a Kids account grabs an M-rated game, it downloads, and
+it disappears from their library once RomM matches it. RomSeek doesn't control
+what RomM itself shows; set that up in RomM.
+
+#### Locked out?
+
+```bash
+docker exec -it romseek python3 /app/romseek.py passwd alex
+docker restart romseek
+```
+
+This sets a new password for the RomSeek account `alex` (creating it if needed)
+and makes it an admin.
 
 ### Step 8. Link RomM (recommended)
 

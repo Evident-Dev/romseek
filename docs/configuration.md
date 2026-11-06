@@ -16,12 +16,32 @@ Put these in `romseek.env`. Only `PROWLARR_KEY` is required.
 | `ROMM_API_TOKEN` | none | RomM client token. Turns on the Library and admin menu. |
 | `SCAN_STATE` | none | Virus scan gate file. See [Virus scanning](virus-scanning.md). |
 | `EXCLUDED_INDEXERS` | `LimeTorrents` | Prowlarr indexers to hide, comma-separated. |
-| `ADMIN_GROUPS` | `admins` | Login groups that get the admin menu, comma-separated. Matched against the `Remote-Groups` header from your proxy ([how that works](setup.md#how-login-and-admin-work)). |
+| `ADMIN_GROUPS` | `admins` | LLDAP or SSO groups whose members are always admins, comma-separated. |
 | `POLL_SECONDS` | `60` | How often RomSeek checks for finished downloads. |
 | `UPLOAD_MAX_MB` | `1024` | Biggest BIOS file you can upload. |
 | `STATE_DIR` | `/state` | Where RomSeek keeps its own data. |
 | `PORT` | `8000` | Port inside the container. |
 | `TITLE_DB_URL` | libretro-database on GitHub | Source of the game title list. |
+
+## Sign-in
+
+See [Step 7 of the setup guide](setup.md#step-7-choose-how-people-sign-in) for how these fit together.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `PROXY_AUTH` | `false` | Trust the user and groups headers from a forward-auth proxy (Authelia, Authentik). Only turn on when the proxy is the only way to reach RomSeek. |
+| `PROXY_USER_HEADER` | `Remote-User` | Header with the username. |
+| `PROXY_GROUPS_HEADER` | `Remote-Groups` | Header with the groups, separated by `,` or `\|`. |
+| `PROXY_NAME_HEADER` | `Remote-Name` | Header with the display name. |
+| `PROXY_EMAIL_HEADER` | `Remote-Email` | Header with the email address. |
+| `LLDAP_URL` | none | LLDAP's web address, like `http://lldap:17170`. Lets people sign in with their LLDAP password. |
+| `LLDAP_LOGIN` | `true` | Set `false` to use `LLDAP_URL` only for syncing. |
+| `LLDAP_SYNC_USER` | none | An LLDAP user in `lldap_strict_readonly`. Lists every LLDAP user in RomSeek ahead of their first sign-in. |
+| `LLDAP_SYNC_PASSWORD` | none | That user's password. |
+| `LLDAP_SYNC_MINUTES` | `15` | How often to sync. |
+| `SESSION_DAYS` | `30` | How long a sign-in lasts. |
+
+Users, groups and sessions are stored in `STATE_DIR` (`users.json`, `sessions.json`). Passwords are salted PBKDF2 hashes.
 
 ---
 

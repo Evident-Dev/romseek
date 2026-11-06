@@ -392,15 +392,74 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
   .shelf{grid-auto-columns:minmax(132px,140px);gap:10px}.ccards{grid-template-columns:repeat(2,1fr);gap:10px}.subnav a{padding:10px 10px}}
 @media (min-width:1440px){.shelf{grid-auto-columns:minmax(170px,190px)}.ccards{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}}
 @media (min-width:1800px){.shelf{grid-auto-columns:minmax(190px,206px)}}
+/* ===== sign-in, account menu, users & groups ===== */
+body.locked>header,body.locked>main{display:none}
+.gate{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.gate .box{width:100%;max-width:400px;background:var(--panel);border:1px solid var(--line-strong);border-radius:var(--radius);padding:26px 24px;box-shadow:0 20px 60px -20px rgba(0,0,0,.8)}
+.gate .brand{margin-bottom:18px}
+.gate h3{font-family:var(--display);text-transform:uppercase;letter-spacing:.06em;margin:0 0 6px;font-size:17px}
+.gate form{display:flex;flex-direction:column;gap:12px}
+.gate label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.gate input{font-size:15px;text-transform:none;letter-spacing:0;color:var(--text)}
+.gate .err:empty{display:none}.gate .err{margin:0;font-size:13px}
+.gate .alt{font-size:13px;color:var(--muted);text-align:center;margin:4px 0 0}
+.gate code,.help code{background:var(--bg-2);border:1px solid var(--line);padding:1px 5px;border-radius:4px;font-size:12px}
+.topr{display:flex;align-items:center;gap:14px}
+.umenu{position:relative}
+#meBtn{background:transparent;border:1px solid var(--line-strong);color:var(--text);padding:5px 11px;font-size:13px;font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.udrop{position:absolute;right:0;top:calc(100% + 6px);background:var(--panel);border:1px solid var(--line-strong);border-radius:var(--radius);min-width:230px;padding:6px;z-index:30;box-shadow:0 12px 40px -12px rgba(0,0,0,.8)}
+.udrop .who{padding:8px 10px 10px;border-bottom:1px solid var(--line);margin-bottom:4px;font-size:14px}
+.udrop .who .help{margin:2px 0 0}
+.udrop button{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--text);font-weight:500;padding:8px 10px}
+.udrop button:hover{background:var(--panel2)}
+body.no-bios [data-bios],body.no-bios [data-upload],body.no-bios [data-managefw],body.no-bios .bios-only{display:none!important}
+body.no-dl nav [data-tab=download]{display:none}
+body:not(.is-admin) nav [data-tab=users]{display:none}
+.gcard{cursor:pointer}.gcard:hover,.gcard:focus-visible{border-color:var(--accent)}
+.utable-wrap{overflow-x:auto}
+.utable td .pill{margin:1px 2px 1px 0}
+#udlg .colform input:not([type=checkbox]),#gdlg .colform input:not([type=checkbox]),#pdlg input{width:100%}
+.colform label.chk{flex-direction:row;align-items:center;text-transform:none;letter-spacing:0;font-size:14px;color:var(--text);margin:2px 0}
+.colform label.chk input{margin:0}
+.colform fieldset:disabled{opacity:.45}
+.colform .ticks.tall{max-height:220px}
+.rpill{font-family:var(--display);letter-spacing:.08em}
 </style>
 </head>
-<body>
+<body class="locked">
+<div class="gate" id="gate" hidden><div class="box">
+  <div class="brand"><svg class="brand-logo" viewBox="0 0 100 100" width="30" height="30" aria-hidden="true"><defs><clipPath id="rs-gc"><circle cx="50" cy="50" r="50"/></clipPath><clipPath id="rs-gs"><polygon points="6,92 86,12 110,12 110,110 6,110"/></clipPath></defs><g clip-path="url(#rs-gc)"><rect width="100" height="100" fill="#e4eef8"/><rect width="100" height="100" fill="#a9c7e4" clip-path="url(#rs-gs)"/><path d="M-2 38C14 38 24 21 38 15C54 9 72 14 80 22C88 36 92 56 102 72L102 104L-2 104Z" fill="#3d7cc0"/><path d="M-2 38C14 38 24 21 38 15C54 9 72 14 80 22C88 36 92 56 102 72L102 104L-2 104Z" fill="#1c3a62" clip-path="url(#rs-gs)"/><circle cx="52" cy="27" r="5.3" fill="#f4e3b6"/><circle cx="42.8" cy="36.2" r="5.3" fill="#f4e3b6"/><circle cx="61.2" cy="36.2" r="5.3" fill="#f2ae62"/><circle cx="52" cy="45.4" r="5.3" fill="#f2ae62"/><circle cx="52" cy="36.2" r="18.5" fill="#f5f8fc" fill-opacity=".14" stroke="#f5f8fc" stroke-width="4.6"/><line x1="66.2" y1="50.4" x2="83" y2="67.2" stroke="#0f2440" stroke-width="11" stroke-linecap="round"/><line x1="66.2" y1="50.4" x2="83" y2="67.2" stroke="#f5f8fc" stroke-width="7" stroke-linecap="round"/><path d="M39.6 30.2a13.4 13.4 0 0 1 7.6-6.6" fill="none" stroke="#f5f8fc" stroke-width="2.6" stroke-linecap="round" opacity=".9"/></g></svg><span class="brand-name">RomSeek</span></div>
+  <form id="loginForm">
+    <h3>Sign in</h3>
+    <label>Username<input id="liUser" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+    <label>Password<input type="password" id="liPass" autocomplete="current-password" required></label>
+    <p class="err" id="liErr"></p>
+    <button>Sign in</button>
+    <p class="alt" id="liAlt"></p>
+  </form>
+  <form id="setupForm" hidden>
+    <h3>Create the admin account</h3>
+    <p class="help" style="margin:0">First run. The setup code is in RomSeek's log (<code>docker logs romseek</code>) and in <code>state/setup-code.txt</code>.</p>
+    <label>Setup code<input id="suCode" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AB12-CD34-EF56" required></label>
+    <label>Username<input id="suUser" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="64" required></label>
+    <label>Display name<input id="suName" autocomplete="name" maxlength="100" placeholder="optional"></label>
+    <label>Password<input type="password" id="suPass" autocomplete="new-password" minlength="8" required></label>
+    <label>Confirm password<input type="password" id="suPass2" autocomplete="new-password" minlength="8" required></label>
+    <p class="err" id="suErr"></p>
+    <button>Create admin &amp; sign in</button>
+    <p class="alt" id="suAlt"></p>
+  </form>
+</div></div>
 <header>
-  <div class="top"><h1 class="brand"><svg class="brand-logo" viewBox="0 0 100 100" width="30" height="30" aria-hidden="true"><defs><clipPath id="rs-c"><circle cx="50" cy="50" r="50"/></clipPath><clipPath id="rs-s"><polygon points="6,92 86,12 110,12 110,110 6,110"/></clipPath></defs><g clip-path="url(#rs-c)"><rect width="100" height="100" fill="#e4eef8"/><rect width="100" height="100" fill="#a9c7e4" clip-path="url(#rs-s)"/><path d="M-2 38C14 38 24 21 38 15C54 9 72 14 80 22C88 36 92 56 102 72L102 104L-2 104Z" fill="#3d7cc0"/><path d="M-2 38C14 38 24 21 38 15C54 9 72 14 80 22C88 36 92 56 102 72L102 104L-2 104Z" fill="#1c3a62" clip-path="url(#rs-s)"/><circle cx="52" cy="27" r="5.3" fill="#f4e3b6"/><circle cx="42.8" cy="36.2" r="5.3" fill="#f4e3b6"/><circle cx="61.2" cy="36.2" r="5.3" fill="#f2ae62"/><circle cx="52" cy="45.4" r="5.3" fill="#f2ae62"/><circle cx="52" cy="36.2" r="18.5" fill="#f5f8fc" fill-opacity=".14" stroke="#f5f8fc" stroke-width="4.6"/><line x1="66.2" y1="50.4" x2="83" y2="67.2" stroke="#0f2440" stroke-width="11" stroke-linecap="round"/><line x1="66.2" y1="50.4" x2="83" y2="67.2" stroke="#f5f8fc" stroke-width="7" stroke-linecap="round"/><path d="M39.6 30.2a13.4 13.4 0 0 1 7.6-6.6" fill="none" stroke="#f5f8fc" stroke-width="2.6" stroke-linecap="round" opacity=".9"/></g></svg><span class="brand-name">RomSeek</span></h1><a id="rommLink" href="#" target="_blank" rel="noopener">Open RomM →</a></div>
+  <div class="top"><h1 class="brand"><svg class="brand-logo" viewBox="0 0 100 100" width="30" height="30" aria-hidden="true"><defs><clipPath id="rs-c"><circle cx="50" cy="50" r="50"/></clipPath><clipPath id="rs-s"><polygon points="6,92 86,12 110,12 110,110 6,110"/></clipPath></defs><g clip-path="url(#rs-c)"><rect width="100" height="100" fill="#e4eef8"/><rect width="100" height="100" fill="#a9c7e4" clip-path="url(#rs-s)"/><path d="M-2 38C14 38 24 21 38 15C54 9 72 14 80 22C88 36 92 56 102 72L102 104L-2 104Z" fill="#3d7cc0"/><path d="M-2 38C14 38 24 21 38 15C54 9 72 14 80 22C88 36 92 56 102 72L102 104L-2 104Z" fill="#1c3a62" clip-path="url(#rs-s)"/><circle cx="52" cy="27" r="5.3" fill="#f4e3b6"/><circle cx="42.8" cy="36.2" r="5.3" fill="#f4e3b6"/><circle cx="61.2" cy="36.2" r="5.3" fill="#f2ae62"/><circle cx="52" cy="45.4" r="5.3" fill="#f2ae62"/><circle cx="52" cy="36.2" r="18.5" fill="#f5f8fc" fill-opacity=".14" stroke="#f5f8fc" stroke-width="4.6"/><line x1="66.2" y1="50.4" x2="83" y2="67.2" stroke="#0f2440" stroke-width="11" stroke-linecap="round"/><line x1="66.2" y1="50.4" x2="83" y2="67.2" stroke="#f5f8fc" stroke-width="7" stroke-linecap="round"/><path d="M39.6 30.2a13.4 13.4 0 0 1 7.6-6.6" fill="none" stroke="#f5f8fc" stroke-width="2.6" stroke-linecap="round" opacity=".9"/></g></svg><span class="brand-name">RomSeek</span></h1><div class="topr"><a id="rommLink" href="#" target="_blank" rel="noopener">Open RomM →</a>
+    <div class="umenu"><button id="meBtn" aria-haspopup="menu" aria-expanded="false"></button>
+      <div class="udrop" id="meDrop" hidden role="menu"><div class="who" id="meWho"></div>
+        <button id="mePw" role="menuitem">Change password</button><button id="meOut" role="menuitem">Sign out</button></div></div></div></div>
   <nav>
     <button data-tab="library">Library<span class="count" id="actCount" hidden></span></button>
     <button data-tab="download">Download games</button>
     <button data-tab="platforms">Platforms &amp; BIOS</button>
+    <button data-tab="users">Users</button>
   </nav>
 </header>
 
@@ -427,9 +486,21 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
     <div id="bres"></div>
   </div>
 
+  <div class="bios-only">
   <h2>Add a platform</h2>
   <p class="help" style="margin:0 0 10px">Adding a platform creates it in RomM so games can be downloaded into it. Platforms marked <span class="pill need">BIOS required</span> need firmware files before games will play.</p>
   <div class="cards" id="avail"></div>
+  </div>
+</section>
+
+<!-- ============ USERS (admins) ============ -->
+<section class="tab" id="tab-users">
+  <div class="vbar"><h2>Groups</h2><button class="sm" id="newGroup">+ New group</button></div>
+  <p class="help" style="margin:0 0 12px">Groups decide what people see and can do. Someone in several groups gets everything any of them allows. People in no set-up group get <b>Default</b>. Admins see and do everything. Hiding a platform or rating only hides those games in RomSeek; it doesn't stop anyone downloading.</p>
+  <div class="cards" id="groupCards"></div>
+  <div class="vbar"><h2>Users</h2><div class="row"><button class="sm ghost" id="syncLdap" hidden>Sync LLDAP now</button><button class="sm" id="newUser">+ New user</button></div></div>
+  <p class="help" id="usersHelp" style="margin:0 0 10px"></p>
+  <div class="utable-wrap" id="userTable"><div class="msg">Loading…</div></div>
 </section>
 
 <!-- ============ LIBRARY ============ -->
@@ -551,6 +622,53 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
   <div class="btns"><button class="ghost" id="cNo">Cancel</button><button id="cYes" style="background:var(--bad);border-color:var(--bad)"></button></div>
 </dialog>
 
+<dialog id="gdlg" class="mdlg">
+  <div class="fwhead"><h3 id="gTitle"></h3><button class="ghost sm" id="gClose">Close</button></div>
+  <form id="gForm" class="colform">
+    <label id="gNameWrap">Name<input id="gName" maxlength="40" placeholder="Kids"></label>
+    <p class="help" id="gSub" style="margin:0"></p>
+    <fieldset><legend>Can</legend>
+      <label class="chk"><input type="checkbox" id="gDl"> Download new games</label>
+      <label class="chk"><input type="checkbox" id="gBios"> Add platforms and download/upload BIOS</label>
+      <label class="chk" id="gAdminWrap"><input type="checkbox" id="gAdmin"> Admin (sees and does everything, manages users)</label>
+    </fieldset>
+    <fieldset id="gPFs"><legend>Platforms they see</legend>
+      <label class="chk"><input type="checkbox" id="gPAll"> All platforms, including ones added later</label>
+      <div class="ticks tall" id="gPlats"></div></fieldset>
+    <fieldset id="gRFs"><legend>Game ratings they see</legend>
+      <label class="chk"><input type="checkbox" id="gRAll"> All ratings</label>
+      <div class="ticks" id="gRates"></div>
+      <p class="help">ESRB-style. Other boards (PEGI, CERO…) are matched to the nearest tier. Games RomM hasn't matched yet count as Unrated.</p></fieldset>
+    <div class="btns"><button type="button" class="ghost" id="gDel" style="margin-right:auto;color:var(--bad)"></button>
+      <button type="button" class="ghost" id="gCancel">Cancel</button><button id="gSave">Save</button></div>
+  </form>
+</dialog>
+<dialog id="udlg" class="mdlg">
+  <div class="fwhead"><h3 id="uTitle"></h3><button class="ghost sm" id="uClose">Close</button></div>
+  <form id="uForm" class="colform">
+    <p class="help" id="uSub" style="margin:0"></p>
+    <div class="erow2"><label>Username<input id="uName" maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+      <label>Display name<input id="uDisp" maxlength="100"></label></div>
+    <label id="uMailWrap">Email<input id="uMail" type="email" maxlength="200" placeholder="optional"></label>
+    <label id="uPwWrap"><span id="uPwLbl">Password</span><input id="uPw1" type="password" autocomplete="new-password" minlength="8"></label>
+    <fieldset><legend>RomSeek groups</legend><div class="ticks" id="uGroups"></div><p class="help" id="uExt"></p></fieldset>
+    <label class="chk"><input type="checkbox" id="uAdmin"> Admin</label>
+    <label class="chk"><input type="checkbox" id="uDis"> Disabled (can't sign in)</label>
+    <p class="help" id="uNote"></p>
+    <div class="btns"><button type="button" class="ghost" id="uDel" style="margin-right:auto;color:var(--bad)">Delete</button>
+      <button type="button" class="ghost" id="uCancel">Cancel</button><button id="uSave">Save</button></div>
+  </form>
+</dialog>
+<dialog id="pdlg">
+  <h3>Change password</h3>
+  <form id="pForm" class="colform" style="display:flex;flex-direction:column;gap:10px">
+    <label>Current password<input type="password" id="pCur" autocomplete="current-password" required></label>
+    <label>New password<input type="password" id="pNew" autocomplete="new-password" minlength="8" required></label>
+    <label>Confirm new password<input type="password" id="pNew2" autocomplete="new-password" minlength="8" required></label>
+    <div class="btns"><button type="button" class="ghost" id="pCancel">Cancel</button><button>Change password</button></div>
+  </form>
+</dialog>
+
 <dialog id="dlg">
   <h3 id="dTitle"></h3>
   <p id="dBody"></p>
@@ -564,8 +682,8 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const size = b => !b ? '—' : b > 1e9 ? (b/1e9).toFixed(1)+' GB' : b > 1e6 ? (b/1e6).toFixed(b > 1e7 ? 0 : 1)+' MB' : Math.max(1, Math.round(b/1e3))+' KB';
 const ago = t => { const s = Date.now()/1000 - t; return s < 3600 ? Math.max(1, Math.round(s/60))+'m ago' : s < 86400 ? Math.round(s/3600)+'h ago' : Math.round(s/86400)+'d ago'; };
-let PLAT = [];
-const P = s => PLAT.find(p => p.slug === s) || {slug:s, label:s || '—'};
+let PLAT = [], PLATALL = [];  // PLAT: platforms this user sees; PLATALL: every platform (grabs into hidden ones still work)
+const P = s => PLAT.find(p => p.slug === s) || PLATALL.find(p => p.slug === s) || {slug:s, label:s || '—'};
 
 function toast(msg, kind) {
   const t = document.createElement('div'); t.className = 'toast ' + (kind || ''); t.textContent = msg;
@@ -574,6 +692,7 @@ function toast(msg, kind) {
 async function api(path, body) {
   const r = await fetch(path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)} : {});
   const d = await r.json().catch(() => ({}));
+  if (r.status === 401 && !path.startsWith('api/auth/')) lock();
   if (!r.ok) { const e = new Error(d.error || r.statusText); e.status = r.status; e.data = d; throw e; }
   return d;
 }
@@ -584,7 +703,8 @@ const biosNeed = p => !p.bios ? '' : p.bios_files ? `<span class="pill good">BIO
 function show(hash) {
   const parts = (hash || '').split('/');
   let tab = parts[0], sub = parts.slice(1).join('/');
-  if (!['download','platforms','library'].includes(tab)) tab = 'library', sub = '';
+  if (!['download','platforms','library','users'].includes(tab) || (tab === 'users' && !ME?.perms.admin)
+      || (tab === 'download' && !ME?.perms.download)) tab = 'library', sub = '';
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   document.querySelectorAll('section.tab').forEach(s => s.classList.toggle('on', s.id === 'tab-' + tab));
   const want = tab + (tab === 'library' && sub ? '/' + sub : '');
@@ -597,6 +717,7 @@ function show(hash) {
     LIB.length ? renderLib() : 0; loadLibrary();
   }
   if (tab === 'download') $('#q').focus();
+  if (tab === 'users') loadUsers();
 }
 document.querySelector('nav').onclick = e => { const b = e.target.closest('button'); if (b) show(b.dataset.tab); };
 window.onhashchange = () => show(location.hash.slice(1));
@@ -636,7 +757,7 @@ function addPlatformDialog(p, forGame) {
 
 /* ---------------- platforms ---------------- */
 async function loadPlatforms() {
-  try { PLAT = await api('api/platforms'); } catch (e) { $('#mine').innerHTML = `<div class="msg err">Could not load platforms: ${esc(e.message)}</div>`; return; }
+  try { PLATALL = await api('api/platforms'); PLAT = PLATALL.filter(p => p.visible !== false); } catch (e) { $('#mine').innerHTML = `<div class="msg err">Could not load platforms: ${esc(e.message)}</div>`; return; }
   const mine = PLAT.filter(p => p.exists), avail = PLAT.filter(p => !p.exists);
   $('#mine').innerHTML = mine.length ? `<div class="cards">${mine.map(p => `
     <div class="card">
@@ -896,13 +1017,16 @@ $('#res').onclick = async e => {
   btn.disabled = true; btn.textContent = '…';
   try {
     let ok = null;
+    const noAdd = () => { toast(`${P(slug).label} isn't set up yet. Ask an admin to add it, then grab again.`, 'bad'); btn.disabled = false; btn.textContent = 'Grab'; };
     if (!P(slug).exists) {
+      if (!CFG.perms?.bios) return noAdd();
       ok = await addPlatformDialog(P(slug), true);
       if (!ok) { btn.disabled = false; btn.textContent = 'Grab'; return; }
     }
     try { await send(); }
     catch (err) {
       if (err.status !== 409) throw err;           // page was stale: ask now
+      if (!err.data.can_add) return noAdd();
       ok = await addPlatformDialog(err.data.platform || P(slug), true);
       if (!ok) { btn.disabled = false; btn.textContent = 'Grab'; return; }
       await send();
@@ -961,7 +1085,11 @@ async function refreshActivity() {
     <p class="help">Peers: connected now, with how many exist in the swarm in brackets.</p>`;
 }
 let LIB = [], CFG = {romm: '', linked: false}, libPlat = '';
-api('api/config').then(c => { CFG = c; if (c.admin) { refreshActivity(); gameKey = ''; if (LIB.length) renderLib(); } if (c.romm) $('#rommLink').href = c.romm; else $('#rommLink').hidden = true; }).catch(() => {});
+async function loadConfig() {
+  try { CFG = await api('api/config'); } catch { return; }
+  if (CFG.admin) { refreshActivity(); gameKey = ''; if (LIB.length) renderLib(); }
+  if (CFG.romm) $('#rommLink').href = CFG.romm; else $('#rommLink').hidden = true;
+}
 const logo = slug => `api/logo/${slug}`;
 const logoImg = (p, cls) => `<img src="${logo(p.slug)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;fallback&quot;>${esc(p.label)}</div>'">`;
 const rommRom = (g, play) => `${CFG.romm}/rom/${g.romm_id}${play ? '/ejs' : ''}`;
@@ -1180,7 +1308,7 @@ function renderGame() {
   crumbs(p.label, t);
   const key = gkey(g) + '|' + (g.title || '') + '|' + (g.cover || '') + '|' + (g.romm_id || '') + '|' + p.bios_files;
   const scanned = !!g.romm_id, canPlay = p.browser && scanned;
-  const meta = [g.year, ...(g.genres || []).slice(0, 4)].filter(Boolean);
+  const meta = [g.year, ...(g.genres || []).slice(0, 4), g.rating && g.rating !== 'Unrated' ? 'Rated ' + g.rating : ''].filter(Boolean);
   const emus = p.emulators?.length ? p.emulators : [RETROARCH];
   const primary = !scanned ? `<span class="pill soft">RomM is still adding this game</span>`
     : canPlay ? `<a class="btn big play" href="${rommRom(g, true)}" target="_blank" rel="noopener">▶ Play in browser</a>`
@@ -1231,13 +1359,13 @@ function biosStep(p, files) {
   const tag = `<span class="pill ${p.bios_files ? 'good' : p.bios === 'required' ? 'need' : 'soft'}">${p.bios_files ? 'Available ✓' : 'BIOS ' + esc(p.bios)}</span>`;
   const note = p.bios_note ? `<p>${esc(p.bios_note)}</p>` : '';
   if (!p.bios_files) return `<div class="row">${tag}</div>${note}
-    ${CFG.admin ? `<div class="row">${p.bios_official ? `<a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a>` : `<button class="sm" data-bios="${p.slug}">${p.bios_dump ? 'Add BIOS files' : 'Find BIOS'}</button>`}
+    ${CFG.perms?.bios ? `<div class="row">${p.bios_official ? `<a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a>` : `<button class="sm" data-bios="${p.slug}">${p.bios_dump ? 'Add BIOS files' : 'Find BIOS'}</button>`}
         <button class="sm ghost" data-upload="${p.slug}">Upload firmware</button></div>` : '<p>An admin needs to add it before this system will run.</p>'}`;
   const list = files === null ? '<p class="help">Loading files…</p>'
     : !files.length ? `<div class="row"><a class="btn ghost" href="${rommPlat(p)}" target="_blank" rel="noopener">Get it from RomM ↗</a></div>`
     : `<div class="flist">${files.map(f => `<a href="${CFG.romm}${f.path}" download><b>${esc(f.name)}</b><span>${size(f.size)}</span></a>`).join('')}</div>
        <p class="help">${files.length} file${files.length === 1 ? '' : 's'}. Put ${files.length === 1 ? 'it' : 'them'} in your emulator's BIOS / system folder.</p>`;
-  return `<div class="row">${tag}${CFG.admin ? `<button class="sm ghost" data-managefw="${p.slug}">Manage</button>` : ''}</div>${note}${list}`;
+  return `<div class="row">${tag}${CFG.perms?.bios ? `<button class="sm ghost" data-managefw="${p.slug}">Manage</button>` : ''}</div>${note}${list}`;
 }
 function setupBoxes(p) {
   const boxes = [];
@@ -1504,11 +1632,234 @@ $('#colDel').onclick = async () => {
   catch (err) { toast(err.message, 'bad'); }
 };
 
+/* ---------------- sign-in + setup ---------------- */
+let ME = null, AUTH = {};
+function lock(state) {
+  if (state) AUTH = state;
+  ME = null;
+  document.body.classList.add('locked'); $('#gate').hidden = false;
+  gateMode(AUTH.setup ? 'setup' : 'login');
+}
+function gateMode(m) {
+  const setup = m === 'setup';
+  $('#setupForm').hidden = !setup; $('#loginForm').hidden = setup;
+  $('#liAlt').innerHTML = AUTH.setup ? '<a href="#" data-gate="setup">First run? Create the admin account</a>' : '';
+  $('#suAlt').innerHTML = AUTH.ldap_login ? '<a href="#" data-gate="login">Have an LLDAP account? Sign in instead</a>' : '';
+  (setup ? $('#suCode') : $('#liUser')).focus();
+}
+$('#gate').addEventListener('click', e => { const a = e.target.closest('[data-gate]'); if (a) { e.preventDefault(); gateMode(a.dataset.gate); } });
+async function gateSubmit(e, path, body, errEl) {
+  e.preventDefault(); errEl.textContent = '';
+  const b = e.target.querySelector('button'); b.disabled = true;
+  try { await api(path, body()); location.reload(); }
+  catch (err) { errEl.textContent = err.message; b.disabled = false; }
+}
+$('#loginForm').onsubmit = e => gateSubmit(e, 'api/auth/login', () => ({username: $('#liUser').value, password: $('#liPass').value}), $('#liErr'));
+$('#setupForm').onsubmit = e => {
+  if ($('#suPass').value !== $('#suPass2').value) { e.preventDefault(); $('#suErr').textContent = "The passwords don't match."; return; }
+  gateSubmit(e, 'api/auth/setup', () => ({code: $('#suCode').value, username: $('#suUser').value, name: $('#suName').value, password: $('#suPass').value}), $('#suErr'));
+};
+
+/* ---------------- account menu ---------------- */
+const SRC = {local: 'RomSeek', proxy: 'SSO', ldap: 'LLDAP'};
+const gLabel = n => n === 'default' ? 'Default' : n;
+function applyMe() {
+  const p = ME.perms;
+  document.body.classList.toggle('no-bios', !p.bios);
+  document.body.classList.toggle('no-dl', !p.download);
+  document.body.classList.toggle('is-admin', !!p.admin);
+  $('#meBtn').textContent = ME.name;
+  const groups = [...new Set([...ME.ext_groups, ...ME.groups])];
+  $('#meWho').innerHTML = `<b>${esc(ME.name)}</b><div class="help">${esc(ME.username)} · ${SRC[ME.source] || esc(ME.source)}${p.admin ? ' · admin' : ''}</div>`
+    + (groups.length ? `<div class="help">Groups: ${groups.map(esc).join(', ')}</div>` : '');
+  $('#mePw').hidden = !ME.has_password;
+  // Behind a trusted proxy the proxy owns the session; signing out here would just sign straight back in.
+  $('#meOut').hidden = AUTH.proxy && ME.source === 'proxy' && !ME.has_password;
+}
+const closeMe = () => { $('#meDrop').hidden = true; $('#meBtn').setAttribute('aria-expanded', 'false'); };
+$('#meBtn').onclick = e => { e.stopPropagation(); const open = $('#meDrop').hidden; $('#meDrop').hidden = !open; $('#meBtn').setAttribute('aria-expanded', String(open)); };
+document.addEventListener('click', e => { if (!e.target.closest('.umenu')) closeMe(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMe(); });
+$('#meOut').onclick = async () => { try { await api('api/auth/logout', {}); } catch {} location.reload(); };
+$('#mePw').onclick = () => { closeMe(); $('#pForm').reset(); $('#pdlg').showModal(); $('#pCur').focus(); };
+$('#pCancel').onclick = () => $('#pdlg').close();
+$('#pForm').onsubmit = async e => {
+  e.preventDefault();
+  if ($('#pNew').value !== $('#pNew2').value) return toast("The new passwords don't match.", 'bad');
+  try { await api('api/auth/password', {current: $('#pCur').value, new: $('#pNew').value}); $('#pdlg').close(); toast('Password changed. Other devices were signed out.', 'good'); }
+  catch (err) { toast(err.message, 'bad'); }
+};
+
+/* ---------------- users & groups (admins) ---------------- */
+let UA = null, gEditing = null, uEditing = null;
+async function loadUsers() {
+  try { UA = await api('api/admin/users'); } catch (e) { $('#userTable').innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
+  renderUsers();
+}
+function groupSummary(g) {
+  if (g.admin || g.env_admin) return '<span class="pill good">Admin</span>';
+  if (!g.configured) return '<span class="pill">Not set up: members get Default</span>';
+  const pl = g.platforms === null ? 'All platforms' : g.platforms.length ? `${g.platforms.length} platform${g.platforms.length === 1 ? '' : 's'}` : 'No platforms';
+  const ra = g.ratings === null ? 'all ratings' : g.ratings.length ? g.ratings.join(', ') : 'no ratings';
+  return `${g.download ? '<span class="pill good">Download games</span>' : '<span class="pill">No downloads</span>'}${g.bios ? '<span class="pill good">Platforms &amp; BIOS</span>' : ''}
+    </div><div class="sub">${esc(pl)} · ${esc(ra)}`;
+}
+function renderUsers() {
+  const a = UA;
+  $('#groupCards').innerHTML = a.groups.map(g => `
+    <div class="card gcard" tabindex="0" role="button" data-group="${esc(g.name)}">
+      <div class="h"><b>${esc(gLabel(g.name))}</b><span class="sub">${g.members} ${g.name === 'default' ? (g.members === 1 ? 'person' : 'people') : 'member' + (g.members === 1 ? '' : 's')}</span></div>
+      <div class="tags">${g.external ? '<span class="pill" title="Comes from your sign-in provider">synced</span>' : g.local ? '<span class="pill">RomSeek group</span>' : ''}${groupSummary(g)}</div>
+    </div>`).join('');
+  const notes = [];
+  if (a.proxy) notes.push('People who sign in through your SSO proxy are added automatically on their first visit; their groups follow the proxy.');
+  if (a.lldap.sync) notes.push(a.lldap.error ? `<span class="err">LLDAP sync failed: ${esc(a.lldap.error)}</span>` : `LLDAP sync: ${a.lldap.count} users${a.lldap.at ? ', ' + ago(a.lldap.at) : ''}.`);
+  else if (a.lldap.login) notes.push('LLDAP users are added when they first sign in.');
+  $('#usersHelp').innerHTML = notes.join(' ');
+  $('#syncLdap').hidden = !a.lldap.sync;
+  $('#userTable').innerHTML = !a.users.length ? '<div class="empty">No users yet.</div>' :
+    `<table class="utable"><thead><tr><th>User</th><th>Sign-in</th><th>Groups</th><th>Last seen</th><th></th></tr></thead><tbody>${a.users.map(u => `
+    <tr${u.disabled ? ' style="opacity:.55"' : ''}><td class="t"><b>${esc(u.name)}</b><div class="help" style="margin:0">${esc(u.username)}${u.email ? ' · ' + esc(u.email) : ''}</div></td>
+      <td class="n">${SRC[u.source] || esc(u.source)}</td>
+      <td>${u.is_admin ? '<span class="pill good">Admin</span>' : ''}${u.disabled ? '<span class="pill need">Disabled</span>' : ''}${[...new Set([...u.ext_groups, ...u.groups])].map(g => `<span class="pill">${esc(g)}</span>`).join('')}</td>
+      <td class="n">${u.last_seen ? ago(u.last_seen) : 'never'}</td>
+      <td class="a"><button class="sm ghost" data-user="${esc(u.username)}">Edit</button></td></tr>`).join('')}</tbody></table>`;
+}
+$('#groupCards').onclick = e => { const c = e.target.closest('[data-group]'); if (c) openGroup(UA.groups.find(g => g.name === c.dataset.group)); };
+$('#groupCards').onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset.group) { e.preventDefault(); e.target.click(); } };
+$('#userTable').onclick = e => { const b = e.target.closest('[data-user]'); if (b) openUser(UA.users.find(u => u.username === b.dataset.user)); };
+$('#newGroup').onclick = () => openGroup(null);
+$('#newUser').onclick = () => openUser(null);
+$('#syncLdap').onclick = async () => {
+  $('#syncLdap').disabled = true;
+  try { const r = await api('api/admin/sync', {}); r.ok ? toast(`Synced ${r.count} LLDAP users`, 'good') : toast(r.error, 'bad'); await loadUsers(); }
+  catch (e) { toast(e.message, 'bad'); } finally { $('#syncLdap').disabled = false; }
+};
+
+const tick = (val, label, on, title) => `<label${title ? ` title="${esc(title)}"` : ''}><input type="checkbox" value="${esc(val)}"${on ? ' checked' : ''}>${esc(label)}</label>`;
+const ticked = sel => [...document.querySelectorAll(sel + ' input:checked')].map(i => i.value);
+function openGroup(g) {
+  const isNew = !g;
+  const x = gEditing = g || {name: '', platforms: null, ratings: null, download: true, bios: false, admin: false, local: true, configured: false, members: 0};
+  $('#gTitle').textContent = isNew ? 'New group' : gLabel(x.name);
+  $('#gNameWrap').hidden = !isNew; $('#gName').value = ''; $('#gName').required = isNew;
+  $('#gSub').innerHTML = x.name === 'default' ? "Applies to everyone who isn't in a set-up group."
+    : isNew ? 'A RomSeek group. Add people to it from their user settings.'
+    : (x.external ? 'Synced from your sign-in provider; who is in it is managed there.' : 'A RomSeek group. Add people to it from their user settings.')
+      + (x.configured ? '' : ' Not set up yet: its members get Default until you save this.')
+      + (x.env_admin ? ' Listed in <code>ADMIN_GROUPS</code>, so its members are always admins.' : '');
+  $('#gDl').checked = x.download; $('#gBios').checked = x.bios;
+  $('#gAdmin').checked = x.admin || x.env_admin; $('#gAdmin').disabled = !!x.env_admin;
+  $('#gAdminWrap').hidden = x.name === 'default';
+  const used = new Set([...(x.platforms || []), ...PLAT.filter(p => p.exists).map(p => p.slug)]);
+  const plats = UA.platforms.slice().sort((a, b) => (used.has(b.slug) - used.has(a.slug)) || a.label.localeCompare(b.label));
+  $('#gPAll').checked = x.platforms === null;
+  $('#gPlats').innerHTML = plats.map(p => tick(p.slug, p.label, x.platforms === null || x.platforms.includes(p.slug))).join('');
+  $('#gRAll').checked = x.ratings === null;
+  $('#gRates').innerHTML = UA.ratings.map(r => tick(r.id, r.id, x.ratings === null || x.ratings.includes(r.id), r.label)).join('');
+  $('#gDel').hidden = isNew || !x.configured || x.name === 'default';
+  $('#gDel').textContent = x.local ? 'Delete group' : 'Clear settings';
+  syncGroupForm();
+  $('#gdlg').showModal();
+  (isNew ? $('#gName') : $('#gSave')).focus();
+}
+function syncGroupForm() {
+  const adm = $('#gAdmin').checked && !$('#gAdminWrap').hidden;
+  $('#gDl').disabled = $('#gBios').disabled = adm;
+  $('#gPFs').disabled = $('#gRFs').disabled = adm;
+  $('#gPAll').disabled = $('#gRAll').disabled = adm;
+  document.querySelectorAll('#gPlats input').forEach(i => i.disabled = adm || $('#gPAll').checked);
+  document.querySelectorAll('#gRates input').forEach(i => i.disabled = adm || $('#gRAll').checked);
+}
+$('#gForm').addEventListener('change', e => {
+  if (e.target === $('#gPAll') || e.target === $('#gRAll'))
+    document.querySelectorAll(e.target === $('#gPAll') ? '#gPlats input' : '#gRates input').forEach(i => i.checked = e.target.checked);
+  syncGroupForm();
+});
+$('#gClose').onclick = $('#gCancel').onclick = () => $('#gdlg').close();
+$('#gForm').onsubmit = async e => {
+  e.preventDefault();
+  const x = gEditing, isNew = !x.name;
+  const body = {name: isNew ? $('#gName').value.trim() : x.name, create: isNew,
+    platforms: $('#gPAll').checked ? null : ticked('#gPlats'), ratings: $('#gRAll').checked ? null : ticked('#gRates'),
+    download: $('#gDl').checked, bios: $('#gBios').checked, admin: $('#gAdmin').checked && !x.env_admin};
+  $('#gSave').disabled = true;
+  try { await api('api/admin/groups', body); $('#gdlg').close(); toast(`Saved ${gLabel(body.name)}`, 'good'); await loadUsers(); await refreshMe(); }
+  catch (err) { toast(err.message, 'bad'); } finally { $('#gSave').disabled = false; }
+};
+$('#gDel').onclick = async () => {
+  const x = gEditing; $('#gdlg').close();
+  const what = x.local ? `Delete the group “${x.name}”?` : `Clear the settings for “${x.name}”?`;
+  const why = x.local ? 'Its members lose what it allowed; the people themselves stay.' : 'Its members go back to Default unless another of their groups is set up.';
+  if (!await confirmBox(what, why, x.local ? 'Delete' : 'Clear', 'Keep')) return;
+  try { await api('api/admin/groups/delete', {name: x.name}); toast('Done', 'good'); await loadUsers(); }
+  catch (err) { toast(err.message, 'bad'); }
+};
+
+function openUser(u) {
+  const isNew = !u, local = isNew || u.source === 'local';
+  uEditing = u;
+  $('#uTitle').textContent = isNew ? 'New user' : u.name;
+  $('#uSub').innerHTML = isNew ? "A RomSeek account with its own password, for people who don't sign in through LLDAP or SSO."
+    : local ? 'RomSeek account.' : `Signs in through ${SRC[u.source]}. Their name, email, password and ${SRC[u.source]} groups are managed there; you can add RomSeek groups on top.`;
+  $('#uName').value = u?.username || ''; $('#uName').disabled = !isNew; $('#uName').required = isNew;
+  $('#uDisp').value = u?.name || ''; $('#uDisp').disabled = !local;
+  $('#uMail').value = u?.email || ''; $('#uMail').disabled = !local;
+  $('#uPwWrap').hidden = !local; $('#uPw1').value = ''; $('#uPw1').required = isNew;
+  $('#uPwLbl').textContent = isNew ? 'Password' : 'New password (leave blank to keep)';
+  const ext = new Set(u?.ext_groups || []);
+  const names = UA.groups.map(g => g.name).filter(n => n !== 'default' && !ext.has(n));
+  $('#uGroups').innerHTML = names.length ? names.map(n => tick(n, n, (u?.groups || []).includes(n))).join('') : '<span class="help">No groups yet. Make one under Groups.</span>';
+  $('#uExt').textContent = ext.size ? `From ${SRC[u.source] || 'sign-in'}: ${[...ext].join(', ')}` : '';
+  $('#uAdmin').checked = !!u?.admin; $('#uDis').checked = !!u?.disabled;
+  const self = u && u.username === ME.username;
+  $('#uAdmin').disabled = $('#uDis').disabled = !!self;
+  $('#uDel').hidden = isNew || self;
+  $('#uNote').innerHTML = [u && u.is_admin && !u.admin ? 'Admin through one of their groups.' : '',
+    self ? "This is you: you can't remove your own admin rights or disable yourself." : '',
+    u && !local ? "Deleting only clears RomSeek's record (and the groups you added); they're re-added the next time they sign in. Tick Disabled to keep them out." : ''].filter(Boolean).join(' ');
+  $('#udlg').showModal();
+  (isNew ? $('#uName') : $('#uSave')).focus();
+}
+$('#uClose').onclick = $('#uCancel').onclick = () => $('#udlg').close();
+$('#uForm').onsubmit = async e => {
+  e.preventDefault();
+  const isNew = !uEditing;
+  const body = {create: isNew, username: isNew ? $('#uName').value.trim() : uEditing.username, name: $('#uDisp').value.trim(),
+    email: $('#uMail').value.trim(), password: $('#uPw1').value, groups: ticked('#uGroups'), admin: $('#uAdmin').checked, disabled: $('#uDis').checked};
+  $('#uSave').disabled = true;
+  try { const r = await api('api/admin/users', body); $('#udlg').close(); toast(`Saved ${r.name}`, 'good'); await loadUsers(); }
+  catch (err) { toast(err.message, 'bad'); } finally { $('#uSave').disabled = false; }
+};
+$('#uDel').onclick = async () => {
+  const u = uEditing; $('#udlg').close();
+  if (!await confirmBox(`Delete ${u.name}?`, u.source === 'local' ? 'Their account and sign-in are removed.' : "They'll be re-added if they sign in again; tick Disabled instead to keep them out.", 'Delete', 'Keep')) return;
+  try { await api('api/admin/users/delete', {username: u.username}); toast('User deleted', 'good'); await loadUsers(); }
+  catch (err) { toast(err.message, 'bad'); }
+};
+async function refreshMe() {
+  const st = await api('api/auth/state').catch(() => null);
+  if (!st?.user) return lock(st || undefined);
+  const before = JSON.stringify(ME.perms);
+  AUTH = st; ME = st.user; applyMe();
+  if (before !== JSON.stringify(ME.perms)) { await loadConfig(); loadPlatforms(); loadLibrary(true); }
+}
+
 /* ---------------- start ---------------- */
-loadPlatforms().then(() => show(location.hash.slice(1)));
-refreshActivity();
-setInterval(() => { refreshActivity(); if ($('#tab-library').classList.contains('on')) loadLibrary(true); }, 10000);
-setInterval(loadPlatforms, 30000);
+async function boot() {
+  let st;
+  try { st = await api('api/auth/state'); } catch { st = {user: null}; }
+  if (!st.user) return lock(st);
+  AUTH = st; ME = st.user;
+  document.body.classList.remove('locked'); $('#gate').hidden = true;
+  applyMe();
+  await loadConfig();
+  loadPlatforms().then(() => show(location.hash.slice(1)));
+  refreshActivity();
+  setInterval(() => { if (!ME) return; refreshActivity(); if ($('#tab-library').classList.contains('on')) loadLibrary(true); }, 10000);
+  setInterval(() => { if (ME) loadPlatforms(); }, 30000);
+}
+boot();
 </script>
 </body>
 </html>

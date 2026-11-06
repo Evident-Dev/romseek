@@ -3,8 +3,9 @@
 and link finished downloads into RomM's library (optionally after a virus scan).
 
 Stdlib only (runs on plain python:3.12-alpine like import-notify).
-Put it behind an authenticating reverse proxy (e.g. Caddy/Traefik + Authelia
-forward-auth). The app itself does no auth yet, so never publish its port.
+Sign-in: local accounts (first admin made by a one-time setup code in the log),
+LLDAP passwords, or a trusted forward-auth proxy (PROXY_AUTH=true). Groups decide
+which platforms and game ratings people see and whether they can download.
 
 Flow:
   search  -> Prowlarr /api/v1/search, categories=1000 (Console)
@@ -188,6 +189,7 @@ def romm_index():
                     "genres": (m.get("genres") or [])[:6],
                     "summary": (r.get("summary") or "")[:2500],
                     "identified": bool(r.get("is_identified")),
+                    "rating": rating_tier(m.get("age_ratings")),
                 }
             offset += len(items)
             if not items or not isinstance(page, dict) or offset >= (page.get("total") or 0):
@@ -358,11 +360,11 @@ def game_count(slug):
 def romm_meta(r):
     """RomM metadata for a library entry (empty when RomM hasn't scanned it yet)."""
     if not r:
-        return {"romm_id": None}
+        return {"romm_id": None, "rating": "Unrated"}
     return {"romm_id": r["id"], "title": r["name"], "fs_name": r["fs_name"],
             "cover": ("api/img?p=" + urllib.parse.quote(r["cover"], safe="")) if r["cover"] else "",
             "year": r["year"], "genres": r["genres"], "summary": r["summary"],
-            "identified": r["identified"]}
+            "identified": r["identified"], "rating": r.get("rating", "Unrated")}
 
 
 _IMG_CACHE = {}
@@ -1230,14 +1232,9 @@ def delete_firmware(slug, filename):
 
 
 # ---------------------------------------------------------------- admin: game management
-# Admins (ADMIN_GROUPS, matched against the forward-auth Remote-Groups header)
-# get a per-game menu: metadata lookup/apply, manual edits, unmatch, remove.
+# Admins (users in ADMIN_GROUPS or an admin group/flag; see "users, groups,
+# permissions" below) get a per-game menu: metadata lookup/apply, manual edits, unmatch, remove.
 ADMIN_GROUPS = {g.strip() for g in os.environ.get("ADMIN_GROUPS", "admins").split(",") if g.strip()}
-
-
-def is_admin(headers):
-    groups = {g.strip() for g in (headers.get("Remote-Groups") or "").split(",")}
-    return bool(groups & ADMIN_GROUPS)
 
 
 def romm_call(method, path, fields=None, query=None, json_body=None, timeout=90):
@@ -1630,47 +1627,724 @@ def platform_firmware(slug):
     return out
 
 
+# ---------------------------------------------------------------- users, groups, permissions
+# Three ways in, all landing in one user list (state/users.json):
+#   1. PROXY_AUTH=true: trust Remote-User/Remote-Groups from a forward-auth proxy
+#      (Authelia, Authentik, ...). Users are created on first visit; their groups
+#      follow the proxy on every request. Only enable when the app is reachable
+#      solely through that proxy, or anyone can forge the headers.
+#   2. LLDAP_URL: the sign-in form checks passwords against LLDAP; with
+#      LLDAP_SYNC_USER/PASSWORD (a read-only account) every user is listed ahead
+#      of their first sign-in.
+#   3. Local accounts made by an admin (or the first-run setup) with a password.
+# Groups grant what users see (platforms, game ratings) and do (download games,
+# add platforms/BIOS). A user gets the union of their configured groups; users in
+# no configured group get the "default" group.
+import base64
+import hmac
+import secrets
+
+PROXY_AUTH = os.environ.get("PROXY_AUTH", "").strip().lower() in ("1", "true", "yes", "on")
+PROXY_USER_HDR = os.environ.get("PROXY_USER_HEADER", "Remote-User")
+PROXY_GROUPS_HDR = os.environ.get("PROXY_GROUPS_HEADER", "Remote-Groups")
+PROXY_NAME_HDR = os.environ.get("PROXY_NAME_HEADER", "Remote-Name")
+PROXY_EMAIL_HDR = os.environ.get("PROXY_EMAIL_HEADER", "Remote-Email")
+LLDAP_URL = os.environ.get("LLDAP_URL", "").rstrip("/")
+LLDAP_LOGIN = bool(LLDAP_URL) and os.environ.get("LLDAP_LOGIN", "true").strip().lower() not in ("0", "false", "no", "off")
+LLDAP_SYNC_USER = os.environ.get("LLDAP_SYNC_USER", "").strip()
+LLDAP_SYNC_PASSWORD = os.environ.get("LLDAP_SYNC_PASSWORD", "")
+LLDAP_SYNC_MINUTES = int(os.environ.get("LLDAP_SYNC_MINUTES", "15"))
+SESSION_DAYS = int(os.environ.get("SESSION_DAYS", "30"))
+COOKIE = "romseek_session"
+
+USERS_FILE = os.path.join(STATE_DIR, "users.json")
+SESSIONS_FILE = os.path.join(STATE_DIR, "sessions.json")
+SETUP_FILE = os.path.join(STATE_DIR, "setup-code.txt")
+AUTH_LOCK = threading.RLock()
+_DB = {"users": {}, "groups": {}}
+_SESS = {}
+_SETUP = {"code": ""}
+_FAILS = {}
+_SYNC = {"t": 0, "error": "", "count": 0}
+
+DEFAULT_GROUP = "default"
+RATINGS = ["E", "E10+", "T", "M", "AO", "Unrated"]
+RATING_HELP = {"E": "Everyone", "E10+": "Everyone 10+", "T": "Teen", "M": "Mature 17+",
+               "AO": "Adults only 18+", "Unrated": "No rating yet (including games RomM hasn't matched)"}
+_ESRB = {"EC": 0, "E": 0, "E10": 1, "E10+": 1, "T": 2, "M": 3, "AO": 4}
+# Other boards IGDB reports (PEGI/USK/CERO/ACB/GRAC/ClassInd), mapped onto the ESRB tiers.
+_OTHER = {"G": 0, "ALL": 0, "A": 0, "L": 0, "PG": 0, "B": 2, "C": 2, "D": 3, "Z": 3,
+          "MA 15+": 3, "R18+": 3, "R 18+": 3, "RC": 4}
+USERNAME_RX = re.compile(r"^[a-z0-9][a-z0-9._@-]{1,63}$")
+GROUPNAME_RX = re.compile(r"^[\w][\w .+@-]{0,39}$")
+
+
+class Denied(Exception):
+    def __init__(self, code, msg):
+        super().__init__(msg)
+        self.code = code
+
+
+def rating_tier(vals):
+    """IGDB age ratings (mixed boards) -> one ESRB-style tier. ESRB wins when present."""
+    esrb, other = None, None
+    for v in vals or []:
+        v = str(v).strip().upper()
+        if v in _ESRB:
+            esrb = max(esrb if esrb is not None else -1, _ESRB[v])
+            continue
+        t = _OTHER.get(v)
+        m = re.fullmatch(r"(\d{1,2})\+?", v)
+        if t is None and m:
+            n = int(m[1])
+            t = 0 if n <= 7 else 1 if n <= 11 else 2 if n <= 16 else 3
+        if t is not None:
+            other = max(other if other is not None else -1, t)
+    t = esrb if esrb is not None else other
+    return RATINGS[t] if t is not None else "Unrated"
+
+
+def _write_private(path, data):
+    tmp = path + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(data, f, indent=1)
+    os.replace(tmp, path)
+
+
+def save_db():
+    with AUTH_LOCK:
+        _write_private(USERS_FILE, _DB)
+
+
+def save_sessions():
+    with AUTH_LOCK:
+        now = time.time()
+        for k in [k for k, s in _SESS.items() if s["exp"] < now]:
+            del _SESS[k]
+        _write_private(SESSIONS_FILE, _SESS)
+
+
+def load_auth():
+    with AUTH_LOCK:
+        try:
+            with open(USERS_FILE) as f:
+                d = json.load(f)
+            _DB["users"], _DB["groups"] = d.get("users", {}), d.get("groups", {})
+        except FileNotFoundError:
+            pass
+        try:
+            with open(SESSIONS_FILE) as f:
+                _SESS.update(json.load(f))
+        except (FileNotFoundError, ValueError):
+            pass
+        if DEFAULT_GROUP not in _DB["groups"]:
+            # Fresh install: everyone sees everything and can download games;
+            # adding platforms/BIOS is admin-only until an admin allows it.
+            _DB["groups"][DEFAULT_GROUP] = {"platforms": None, "ratings": None,
+                                            "download": True, "bios": False, "admin": False}
+            save_db()
+    refresh_setup_code()
+
+
+def hash_password(pw):
+    salt = os.urandom(16)
+    it = 310000
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, it)
+    return f"pbkdf2_sha256${it}${base64.b64encode(salt).decode()}${base64.b64encode(dk).decode()}"
+
+
+def check_password(pw, stored):
+    try:
+        algo, it, salt, dk = stored.split("$")
+        assert algo == "pbkdf2_sha256"
+        got = hashlib.pbkdf2_hmac("sha256", pw.encode(), base64.b64decode(salt), int(it))
+        return hmac.compare_digest(got, base64.b64decode(dk))
+    except Exception:
+        return False
+
+
+_DUMMY_HASH = hash_password(secrets.token_hex(8))
+
+
+def check_new_password(pw):
+    if len(pw) < 8:
+        raise ValueError("use at least 8 characters for the password")
+    if len(pw) > 256:
+        raise ValueError("password is too long")
+
+
+def user_groups(u):
+    return sorted(set(u.get("ext_groups") or []) | set(u.get("groups") or []))
+
+
+def admin_groups():
+    return ADMIN_GROUPS | {n for n, g in _DB["groups"].items() if g.get("admin") and n != DEFAULT_GROUP}
+
+
+def user_is_admin(u):
+    return bool(u.get("admin")) or bool(set(user_groups(u)) & admin_groups())
+
+
+def perms_for(u):
+    if user_is_admin(u):
+        return {"admin": True, "platforms": None, "ratings": None, "download": True, "bios": True}
+    cfg = [_DB["groups"][g] for g in user_groups(u) if g in _DB["groups"] and g != DEFAULT_GROUP]
+    if not cfg:
+        cfg = [_DB["groups"][DEFAULT_GROUP]]
+
+    def union(k):
+        if any(g.get(k) is None for g in cfg):
+            return None  # some group allows all
+        return sorted(set().union(*[set(g.get(k) or []) for g in cfg]))
+    return {"admin": False, "platforms": union("platforms"), "ratings": union("ratings"),
+            "download": any(g.get("download") for g in cfg), "bios": any(g.get("bios") for g in cfg)}
+
+
+def can_see_platform(p, slug):
+    return p["platforms"] is None or slug in p["platforms"]
+
+
+def can_see_game(p, g):
+    return can_see_platform(p, g["platform"]) and (p["ratings"] is None or g.get("rating", "Unrated") in p["ratings"])
+
+
+def needs_setup():
+    """True until some admin can sign in. Not offered behind a trusted proxy (admins come from its groups)."""
+    if PROXY_AUTH:
+        return False
+    with AUTH_LOCK:
+        return not any(user_is_admin(u) for u in _DB["users"].values() if not u.get("disabled"))
+
+
+def refresh_setup_code():
+    """Fresh install: print a one-time code to the log so only whoever can read
+    the server's log (or state folder) can create the first admin."""
+    if not needs_setup():
+        _SETUP["code"] = ""
+        try:
+            os.remove(SETUP_FILE)
+        except OSError:
+            pass
+        return
+    if not _SETUP["code"]:
+        _SETUP["code"] = "-".join(secrets.token_hex(2).upper() for _ in range(3))
+        try:
+            fd = os.open(SETUP_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(_SETUP["code"] + "\n")
+        except OSError:
+            pass
+        log("=" * 60)
+        log("No admin account yet. Open RomSeek and create one with setup code:")
+        log("    " + _SETUP["code"])
+        log(f"(also saved to {SETUP_FILE}; it changes on every restart until setup is done)")
+        log("=" * 60)
+
+
+def throttle(key, limit=8):
+    now = time.time()
+    with AUTH_LOCK:
+        fails = [t for t in _FAILS.get(key, []) if now - t < 900]
+        _FAILS[key] = fails
+        if len(fails) >= limit:
+            raise Denied(429, "too many attempts; try again in 15 minutes")
+
+
+def failed(key):
+    with AUTH_LOCK:
+        _FAILS.setdefault(key, []).append(time.time())
+        if len(_FAILS) > 5000:
+            _FAILS.clear()
+
+
+def new_session(uname):
+    tok = secrets.token_urlsafe(32)
+    with AUTH_LOCK:
+        _SESS[hashlib.sha256(tok.encode()).hexdigest()] = {"user": uname, "exp": time.time() + SESSION_DAYS * 86400}
+        save_sessions()
+    return tok
+
+
+def drop_sessions(uname=None, tok=None):
+    with AUTH_LOCK:
+        if tok:
+            _SESS.pop(hashlib.sha256(tok.encode()).hexdigest(), None)
+        if uname:
+            for k in [k for k, s in _SESS.items() if s["user"] == uname]:
+                del _SESS[k]
+        save_sessions()
+
+
+def session_user(tok):
+    if not tok:
+        return None
+    with AUTH_LOCK:
+        s = _SESS.get(hashlib.sha256(tok.encode()).hexdigest())
+        if not s or s["exp"] < time.time():
+            return None
+        return s["user"]
+
+
+def _hdr(h, name):
+    # http.server decodes headers as latin-1; proxies send UTF-8 (e.g. accented display names).
+    v = (h.get(name) or "").strip()
+    try:
+        return v.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return v
+
+
+def touch_external(uname, source, name, email, groups):
+    """Create or refresh a user from the proxy or LLDAP. Returns the record."""
+    now = int(time.time())
+    with AUTH_LOCK:
+        u = _DB["users"].get(uname)
+        changed = False
+        if u is None:
+            u = _DB["users"][uname] = {"source": source, "created": now, "groups": [], "admin": False, "disabled": False}
+            changed = True
+            log("user provisioned:", uname, f"({source})")
+        elif u.get("source") not in (source, "local") and source == "ldap":
+            u["source"], changed = "ldap", True
+        for k, v in (("name", name or uname), ("email", email or ""), ("ext_groups", sorted(set(groups)))):
+            if u.get(k) != v:
+                u[k], changed = v, True
+        if now - u.get("last_seen", 0) > 3600:
+            u["last_seen"], changed = now, True
+        if changed:
+            save_db()
+            if _SETUP["code"]:
+                refresh_setup_code()
+        return u
+
+
+def proxy_user(h):
+    uname = _hdr(h, PROXY_USER_HDR).lower()[:100]
+    if not uname:
+        return None
+    groups = [g.strip() for g in re.split(r"[,|]", _hdr(h, PROXY_GROUPS_HDR)) if g.strip()]
+    touch_external(uname, "proxy", _hdr(h, PROXY_NAME_HDR)[:100], _hdr(h, PROXY_EMAIL_HDR)[:200], groups)
+    return uname
+
+
+def cookie_value(h, name):
+    for part in (h.get("Cookie") or "").split(";"):
+        k, _, v = part.strip().partition("=")
+        if k == name:
+            return v
+    return ""
+
+
+def resolve_user(h):
+    """-> (username, record) or (None, None)."""
+    uname = proxy_user(h) if PROXY_AUTH else None
+    if not uname:
+        uname = session_user(cookie_value(h, COOKIE))
+    if not uname:
+        return None, None
+    with AUTH_LOCK:
+        u = _DB["users"].get(uname)
+        return (uname, dict(u)) if u else (None, None)
+
+
+# --- LLDAP
+def lldap_post(path, body, token=None):
+    hdr = {"Content-Type": "application/json", "User-Agent": "romseek"}
+    if token:
+        hdr["Authorization"] = "Bearer " + token
+    req = urllib.request.Request(LLDAP_URL + path, data=json.dumps(body).encode(), headers=hdr, method="POST")
+    with urllib.request.urlopen(req, timeout=15) as r:
+        d = json.loads(r.read())
+    if isinstance(d, dict) and d.get("errors"):
+        raise ValueError("LLDAP: " + "; ".join(str(e.get("message")) for e in d["errors"]))
+    return d
+
+
+def lldap_token(user, password):
+    try:
+        return lldap_post("/auth/simple/login", {"username": user, "password": password})["token"]
+    except urllib.error.HTTPError as e:
+        if e.code in (400, 401, 403, 404):
+            return None
+        raise
+
+
+def lldap_login(uname, password):
+    tok = lldap_token(uname, password)
+    if not tok:
+        return False
+    q = "query($id:String!){user(userId:$id){id displayName email groups{displayName}}}"
+    usr = (lldap_post("/api/graphql", {"query": q, "variables": {"id": uname}}, tok).get("data") or {}).get("user")
+    if not usr:
+        return False
+    touch_external(usr["id"].lower(), "ldap", usr.get("displayName"), usr.get("email"),
+                   [g["displayName"] for g in usr.get("groups") or []])
+    return True
+
+
+def lldap_sync():
+    """List every LLDAP user (needs a read-only account). Users gone from LLDAP are removed."""
+    if not (LLDAP_URL and LLDAP_SYNC_USER):
+        return {"ok": False, "error": "set LLDAP_URL, LLDAP_SYNC_USER and LLDAP_SYNC_PASSWORD"}
+    try:
+        tok = lldap_token(LLDAP_SYNC_USER, LLDAP_SYNC_PASSWORD)
+        if not tok:
+            raise ValueError("LLDAP refused LLDAP_SYNC_USER's password")
+        q = "{users{id displayName email groups{displayName}}}"
+        users = lldap_post("/api/graphql", {"query": q}, tok)["data"]["users"]
+        seen = set()
+        for usr in users:
+            uname = usr["id"].lower()
+            seen.add(uname)
+            touch_external(uname, "ldap", usr.get("displayName"), usr.get("email"),
+                           [g["displayName"] for g in usr.get("groups") or []])
+        with AUTH_LOCK:
+            gone = [n for n, u in _DB["users"].items() if u.get("source") == "ldap" and n not in seen]
+            for n in gone:
+                del _DB["users"][n]
+                log("user removed (gone from LLDAP):", n)
+            if gone:
+                save_db()
+        for n in gone:
+            drop_sessions(n)
+        _SYNC.update(t=time.time(), error="", count=len(users))
+    except Exception as e:
+        _SYNC.update(t=time.time(), error=str(e))
+        log("LLDAP sync error:", repr(e))
+    return {"ok": not _SYNC["error"], "error": _SYNC["error"], "count": _SYNC["count"], "at": int(_SYNC["t"])}
+
+
+def lldap_loop():
+    while True:
+        lldap_sync()
+        time.sleep(max(1, LLDAP_SYNC_MINUTES) * 60)
+
+
+# --- sign-in, setup, accounts
+def login(uname, password, ip):
+    uname = uname.strip().lower()
+    key = f"{ip}|{uname}"
+    throttle(key)
+    throttle(ip, 20)
+    throttle("user|" + uname, 30)  # X-Forwarded-For can be forged when the port is exposed
+    with AUTH_LOCK:
+        u = _DB["users"].get(uname)
+        stored = (u or {}).get("password")
+    if stored:
+        ok = check_password(password, stored)
+    elif LLDAP_LOGIN and (u is None or u.get("source") != "local"):
+        try:
+            ok = lldap_login(uname, password)
+        except Exception as e:
+            log("LLDAP login error:", repr(e))
+            raise Denied(502, "couldn't reach LLDAP to check the password")
+    else:
+        check_password(password, _DUMMY_HASH)  # same timing as a real check
+        ok = False
+    if not ok:
+        failed(key); failed(ip); failed("user|" + uname)
+        log("sign-in failed:", uname, "from", ip)
+        raise Denied(401, "wrong username or password")
+    with AUTH_LOCK:
+        u = _DB["users"][uname]
+        if u.get("disabled"):
+            raise Denied(403, "this account is disabled")
+        u["last_seen"] = int(time.time())
+        save_db()
+    log("signed in:", uname)
+    return new_session(uname)
+
+
+def setup_admin(body, ip):
+    if not needs_setup() or not _SETUP["code"]:
+        raise Denied(409, "setup is already done; sign in instead")
+    throttle(ip)
+    code = str(body.get("code") or "").strip().upper()
+    if not hmac.compare_digest(code.encode(), _SETUP["code"].encode()):
+        failed(ip)
+        raise Denied(403, "wrong setup code; it's in the RomSeek server log")
+    uname = str(body.get("username") or "").strip().lower()
+    if not USERNAME_RX.match(uname):
+        raise ValueError("username: 2-64 characters, letters, numbers, . _ - @")
+    pw = str(body.get("password") or "")
+    check_new_password(pw)
+    with AUTH_LOCK:
+        if uname in _DB["users"] and _DB["users"][uname].get("source") != "local":
+            raise ValueError("that username belongs to an LLDAP account; pick another")
+        _DB["users"][uname] = {"source": "local", "name": str(body.get("name") or uname).strip()[:100] or uname,
+                               "email": str(body.get("email") or "").strip()[:200], "password": hash_password(pw),
+                               "groups": [], "admin": True, "disabled": False,
+                               "created": int(time.time()), "last_seen": int(time.time())}
+        save_db()
+    refresh_setup_code()
+    log("setup done; first admin:", uname)
+    return new_session(uname)
+
+
+def change_password(uname, current, new):
+    with AUTH_LOCK:
+        u = _DB["users"].get(uname)
+        if not u or not u.get("password"):
+            raise ValueError("this account's password is managed by your sign-in provider")
+        if not check_password(current, u["password"]):
+            raise Denied(403, "current password is wrong")
+        check_new_password(new)
+        u["password"] = hash_password(new)
+        save_db()
+    drop_sessions(uname)
+    log("password changed:", uname)
+    return new_session(uname)
+
+
+def public_user(n, u):
+    return {"username": n, "name": u.get("name") or n, "email": u.get("email") or "",
+            "source": u.get("source", "local"), "groups": sorted(u.get("groups") or []),
+            "ext_groups": sorted(u.get("ext_groups") or []), "admin": bool(u.get("admin")),
+            "is_admin": user_is_admin(u), "disabled": bool(u.get("disabled")),
+            "has_password": bool(u.get("password")), "created": u.get("created"), "last_seen": u.get("last_seen")}
+
+
+def group_names():
+    with AUTH_LOCK:
+        names = set(_DB["groups"]) | ADMIN_GROUPS
+        for u in _DB["users"].values():
+            names |= set(user_groups(u))
+    names.discard(DEFAULT_GROUP)
+    return sorted(names, key=str.lower)
+
+
+def admin_overview():
+    with AUTH_LOCK:
+        users = sorted((public_user(n, u) for n, u in _DB["users"].items()), key=lambda x: x["username"])
+        ext = {g for u in _DB["users"].values() for g in u.get("ext_groups") or []}
+        members = {}
+        for u in _DB["users"].values():
+            for g in user_groups(u):
+                members[g] = members.get(g, 0) + 1
+        groups = []
+        for n in [DEFAULT_GROUP] + group_names():
+            g = _DB["groups"].get(n)
+            groups.append({"name": n, "configured": g is not None, "external": n in ext,
+                           "local": bool(g and g.get("local")), "env_admin": n in ADMIN_GROUPS,
+                           "members": members.get(n, 0) if n != DEFAULT_GROUP else
+                           sum(1 for u in _DB["users"].values()
+                               if not any(x in _DB["groups"] and x != DEFAULT_GROUP for x in user_groups(u))),
+                           **{k: (g or {}).get(k, d) for k, d in (("platforms", []), ("ratings", []), ("download", False),
+                                                                  ("bios", False), ("admin", False))}})
+    return {"users": users, "groups": groups, "ratings": [{"id": r, "label": RATING_HELP[r]} for r in RATINGS],
+            "platforms": [{"slug": s, "label": l} for s, l, _ in PLATFORMS],
+            "lldap": {"login": LLDAP_LOGIN, "sync": bool(LLDAP_URL and LLDAP_SYNC_USER), "error": _SYNC["error"],
+                      "count": _SYNC["count"], "at": int(_SYNC["t"])},
+            "proxy": PROXY_AUTH, "admin_groups": sorted(ADMIN_GROUPS)}
+
+
+def _str_list(v, allowed):
+    if v is None:
+        return None
+    if not isinstance(v, list):
+        raise ValueError("expected a list")
+    return sorted({str(x) for x in v if str(x) in allowed})
+
+
+def save_group(body, me):
+    name = str(body.get("name") or "").strip()
+    if name != DEFAULT_GROUP and not GROUPNAME_RX.match(name):
+        raise ValueError("group name: up to 40 letters, numbers, spaces, . + - @ _")
+    with AUTH_LOCK:
+        existing = _DB["groups"].get(name)
+        is_new = name not in group_names() and name != DEFAULT_GROUP
+        if body.get("create") and (existing or not is_new):
+            raise ValueError("a group with that name already exists")
+        # null = all (including platforms added later); a missing key grants nothing
+        g = {"platforms": _str_list(body.get("platforms", []), SLUGS), "ratings": _str_list(body.get("ratings", []), set(RATINGS)),
+             "download": bool(body.get("download")), "bios": bool(body.get("bios")),
+             "admin": bool(body.get("admin")) and name != DEFAULT_GROUP,
+             "local": bool((existing or {}).get("local") or is_new)}
+        before = user_is_admin(_DB["users"].get(me, {}))
+        _DB["groups"][name] = g
+        if before and not user_is_admin(_DB["users"].get(me, {})):
+            if existing is None:
+                del _DB["groups"][name]
+            else:
+                _DB["groups"][name] = existing
+            raise ValueError("that would remove your own admin rights")
+        save_db()
+    refresh_setup_code()
+    log("group saved:", name)
+    return {"ok": True}
+
+
+def delete_group(name, me):
+    if name == DEFAULT_GROUP:
+        raise ValueError("the default group can't be removed")
+    with AUTH_LOCK:
+        g = _DB["groups"].get(name)
+        if g is None:
+            raise ValueError("that group has no settings to remove")
+        before = user_is_admin(_DB["users"].get(me, {}))
+        del _DB["groups"][name]
+        if g.get("local"):
+            for u in _DB["users"].values():
+                if name in (u.get("groups") or []):
+                    u["groups"] = [x for x in u["groups"] if x != name]
+        if before and not user_is_admin(_DB["users"].get(me, {})):
+            _DB["groups"][name] = g
+            raise ValueError("that would remove your own admin rights")
+        save_db()
+    log("group removed:", name)
+    return {"ok": True}
+
+
+def save_user(body, me):
+    uname = str(body.get("username") or "").strip().lower()
+    create = bool(body.get("create"))
+    known = set(group_names())
+    with AUTH_LOCK:
+        u = _DB["users"].get(uname)
+        if create:
+            if not USERNAME_RX.match(uname):
+                raise ValueError("username: 2-64 characters, letters, numbers, . _ - @")
+            if u:
+                raise ValueError("that username is taken")
+            pw = str(body.get("password") or "")
+            check_new_password(pw)
+            u = {"source": "local", "password": hash_password(pw), "created": int(time.time()), "ext_groups": []}
+        elif not u:
+            raise ValueError("no such user")
+        old = dict(u)
+        if u.get("source") == "local":
+            u["name"] = str(body.get("name") or uname).strip()[:100] or uname
+            u["email"] = str(body.get("email") or "").strip()[:200]
+            if not create and body.get("password"):
+                check_new_password(str(body["password"]))
+                u["password"] = hash_password(str(body["password"]))
+        u["groups"] = sorted({str(g) for g in body.get("groups") or [] if str(g) in known and str(g) != DEFAULT_GROUP})
+        u["admin"] = bool(body.get("admin"))
+        u["disabled"] = bool(body.get("disabled"))
+        if uname == me and (u["disabled"] or not user_is_admin(u)):
+            _DB["users"][uname] = old
+            raise ValueError("you can't disable yourself or take away your own admin rights")
+        _DB["users"][uname] = u
+        save_db()
+    if u["disabled"] or (not create and body.get("password")):
+        drop_sessions(uname)
+    log("user", "created:" if create else "saved:", uname)
+    return public_user(uname, u)
+
+
+def delete_user(uname, me):
+    if uname == me:
+        raise ValueError("you can't delete your own account")
+    with AUTH_LOCK:
+        if uname not in _DB["users"]:
+            raise ValueError("no such user")
+        del _DB["users"][uname]
+        save_db()
+    drop_sessions(uname)
+    refresh_setup_code()
+    log("user deleted:", uname)
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------- web
 PAGE = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"), encoding="utf-8").read()
 
 
 class H(BaseHTTPRequestHandler):
+    # Reachable without signing in. /api/stats is counts only, for dashboard widgets.
+    PUBLIC = {"/", "/healthz", "/api/stats", "/api/auth/state", "/api/auth/login", "/api/auth/setup"}
+
     def log_message(self, *a):
         pass
 
-    def send(self, code, body, ctype="application/json", cache=None):
+    def send(self, code, body, ctype="application/json", cache=None, cookie=None):
         if not isinstance(body, bytes):
             body = (json.dumps(body) if ctype == "application/json" else body).encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype if ctype.startswith("image/") else ctype + "; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", cache or "no-store")
+        if cookie is not None:
+            secure = "; Secure" if (self.headers.get("X-Forwarded-Proto") or "").lower() == "https" else ""
+            age = SESSION_DAYS * 86400 if cookie else 0
+            self.send_header("Set-Cookie", f"{COOKIE}={cookie}; Path=/; Max-Age={age}; HttpOnly; SameSite=Lax{secure}")
+        if ctype == "text/html":
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "same-origin")
         self.end_headers()
         self.wfile.write(body)
+
+    def ip(self):
+        fwd = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+        return fwd or self.client_address[0]
+
+    def auth(self, path):
+        """Sets self.who/self.u/self.p; raises Denied when the route needs a user."""
+        self.who, self.u = resolve_user(self.headers)
+        self.p = perms_for(self.u) if self.u else None
+        if self.u and self.u.get("disabled"):
+            self.who, self.u, self.p = None, None, None
+            if path not in self.PUBLIC:
+                raise Denied(403, "this account is disabled")
+        if not self.u and path not in self.PUBLIC:
+            raise Denied(401, "sign in first")
+
+    def need(self, what):
+        if not self.p or not self.p.get(what):
+            raise Denied(403, {"admin": "admins only", "download": "you don't have permission to download games",
+                               "bios": "you don't have permission to add platforms or BIOS files"}[what])
+
+    def need_platform(self, slug):
+        if slug not in SLUGS:
+            raise ValueError("unknown platform")
+        if not can_see_platform(self.p, slug):
+            raise Denied(403, "that platform isn't available to you")
+
+    def by(self):
+        log("  by", self.who or "?")
+
+    def me(self):
+        if not self.u:
+            return None
+        return {**public_user(self.who, self.u), "perms": self.p}
 
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
         qs = urllib.parse.parse_qs(u.query)
+        g = lambda k, d="": (qs.get(k) or [d])[0]
         try:
+            self.auth(u.path)
             if u.path == "/":
-                user = html.escape(self.headers.get("Remote-Name") or self.headers.get("Remote-User") or "")
                 plats = json.dumps([[s, l] for s, l, _ in PLATFORMS])
-                return self.send(200, PAGE.replace("__PLATFORMS__", plats).replace("__USER__", user), "text/html")
+                return self.send(200, PAGE.replace("__PLATFORMS__", plats), "text/html")
+            if u.path == "/healthz":
+                return self.send(200, {"ok": True})
+            if u.path == "/api/stats":
+                # For dashboard widgets (e.g. Homepage "customapi"): small, cheap counts.
+                return self.send(200, stats())
+            if u.path == "/api/auth/state":
+                return self.send(200, {"user": self.me(), "setup": needs_setup(), "local_login": True,
+                                       "ldap_login": LLDAP_LOGIN, "proxy": PROXY_AUTH})
+            if u.path == "/api/config":
+                return self.send(200, {"romm": ROMM_PUBLIC, "linked": bool(ROMM_TOKEN), "admin": self.p["admin"],
+                                       "perms": self.p, "user": self.me(), "romm_error": romm_index()["error"]})
             if u.path == "/api/search":
-                q = (qs.get("q") or [""])[0].strip()
+                bios = g("kind") == "bios"
+                self.need("bios" if bios else "download")
+                q = g("q").strip()
                 if len(q) < 2:
                     return self.send(400, {"error": "type at least 2 characters"})
-                return self.send(200, search(q, any_category=(qs.get("kind") or [""])[0] == "bios"))
+                return self.send(200, search(q, any_category=bios))
             if u.path == "/api/platforms":
-                return self.send(200, platforms())
+                # All platforms (grabs into hidden ones still work); the page shows only visible ones.
+                return self.send(200, [{**x, "visible": can_see_platform(self.p, x["slug"])} for x in platforms()])
             if u.path == "/api/firmware":
-                slug = (qs.get("platform") or [""])[0]
-                if slug not in SLUGS:
-                    return self.send(400, {"error": "unknown platform"})
-                return self.send(200, bios_entries(slug))
+                self.need_platform(g("platform"))
+                return self.send(200, bios_entries(g("platform")))
             if u.path == "/api/img":
                 try:
-                    data, ctype = romm_asset((qs.get("p") or [""])[0])
+                    data, ctype = romm_asset(g("p"))
                 except (ValueError, urllib.error.URLError):
                     return self.send(404, {"error": "no image"})
                 return self.send(200, data, ctype, cache="private, max-age=86400")
@@ -1680,20 +2354,12 @@ class H(BaseHTTPRequestHandler):
                 except (ValueError, urllib.error.URLError):
                     return self.send(404, {"error": "no logo"})
                 return self.send(200, data, ctype, cache="private, max-age=604800")
-            if u.path == "/api/config":
-                return self.send(200, {"romm": ROMM_PUBLIC, "linked": bool(ROMM_TOKEN), "admin": is_admin(self.headers),
-                                       "romm_error": romm_index()["error"]})
-            if u.path == "/api/stats":
-                # For dashboard widgets (e.g. Homepage "customapi"): small, cheap counts.
-                return self.send(200, stats())
             if u.path == "/api/library":
-                return self.send(200, library())
+                return self.send(200, [x for x in library() if can_see_game(self.p, x)])
             if u.path == "/api/queue":
                 return self.send(200, queue())
             if u.path in ("/api/game/meta", "/api/game/torrents"):
-                if not is_admin(self.headers):
-                    return self.send(403, {"error": "admins only"})
-                g = lambda k: (qs.get(k) or [""])[0]
+                self.need("admin")
                 library_entry(g("platform"), g("name"))
                 if u.path == "/api/game/torrents":
                     return self.send(200, game_torrents(g("platform"), g("name")))
@@ -1701,13 +2367,14 @@ class H(BaseHTTPRequestHandler):
             if u.path == "/api/collections":
                 return self.send(200, load_collections())
             if u.path == "/api/bios-files":
-                slug = (qs.get("platform") or [""])[0]
-                if slug not in SLUGS:
-                    return self.send(400, {"error": "unknown platform"})
-                return self.send(200, platform_firmware(slug))
-            if u.path == "/healthz":
-                return self.send(200, {"ok": True})
+                self.need_platform(g("platform"))
+                return self.send(200, platform_firmware(g("platform")))
+            if u.path == "/api/admin/users":
+                self.need("admin")
+                return self.send(200, admin_overview())
             return self.send(404, {"error": "not found"})
+        except Denied as e:
+            return self.send(e.code, {"error": str(e)})
         except ValueError as e:
             return self.send(400, {"error": str(e)})
         except Exception as e:
@@ -1715,29 +2382,73 @@ class H(BaseHTTPRequestHandler):
             return self.send(502, {"error": str(e)})
 
     def do_POST(self):
+        u = urllib.parse.urlparse(self.path)
+        path = u.path
         try:
+            # Cross-site form posts: the cookie is SameSite=Lax, and this rejects any foreign Origin.
+            origin = self.headers.get("Origin")
+            if origin:
+                host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
+                if urllib.parse.urlparse(origin).netloc != host.split(",")[0].strip():
+                    raise Denied(403, "cross-site request refused")
+            self.auth(path)
             n = int(self.headers.get("Content-Length") or 0)
-            u = urllib.parse.urlparse(self.path)
-            if u.path == "/api/firmware":
+            if path == "/api/firmware":
+                self.need("bios")
                 qs = urllib.parse.parse_qs(u.query)
-                fname = urllib.parse.unquote(self.headers.get("X-Filename") or "")
                 g = lambda k, d="": (qs.get(k) or [d])[0]
+                self.need_platform(g("platform"))
+                fname = urllib.parse.unquote(self.headers.get("X-Filename") or "")
                 info = upload_firmware(g("platform"), fname, n, self.rfile,
                                        offset=int(g("offset", "0")), total=int(g("total", str(n))),
                                        upload_id=g("id"))
                 if info["done"]:
-                    log("  by", self.headers.get("Remote-User", "?"))
+                    self.by()
                 return self.send(200, info)
-            body = json.loads(self.rfile.read(min(n, 20000)) or b"{}")
-            if self.path.startswith("/api/game/"):
-                if not is_admin(self.headers):
-                    return self.send(403, {"error": "admins only"})
-                who = self.headers.get("Remote-User", "?")
-                act = self.path.rsplit("/", 1)[-1]
+            body = json.loads(self.rfile.read(min(n, 200000)) or b"{}")
+            if not isinstance(body, dict):
+                raise ValueError("expected a JSON object")
+            s = lambda k: str(body.get(k) or "")
+
+            # --- sign-in
+            if path == "/api/auth/login":
+                tok = login(s("username"), s("password"), self.ip())
+                return self.send(200, {"ok": True}, cookie=tok)
+            if path == "/api/auth/setup":
+                tok = setup_admin(body, self.ip())
+                return self.send(200, {"ok": True}, cookie=tok)
+            if path == "/api/auth/logout":
+                drop_sessions(tok=cookie_value(self.headers, COOKIE))
+                return self.send(200, {"ok": True}, cookie="")
+            if path == "/api/auth/password":
+                tok = change_password(self.who, s("current"), s("new"))
+                return self.send(200, {"ok": True}, cookie=tok)
+
+            # --- admin: users and groups
+            if path.startswith("/api/admin/"):
+                self.need("admin")
+                act = path[len("/api/admin/"):]
+                if act == "users":
+                    r = save_user(body, self.who)
+                elif act == "users/delete":
+                    r = delete_user(s("username"), self.who)
+                elif act == "groups":
+                    r = save_group(body, self.who)
+                elif act == "groups/delete":
+                    r = delete_group(s("name"), self.who)
+                elif act == "sync":
+                    r = lldap_sync()
+                else:
+                    return self.send(404, {"error": "not found"})
+                self.by()
+                return self.send(200, r)
+
+            if path.startswith("/api/game/"):
+                self.need("admin")
+                act = path.rsplit("/", 1)[-1]
                 rid = body.get("rom_id")
                 if act == "remove":
-                    r = remove_game(str(body.get("platform", "")), str(body.get("name", "")), rid,
-                                    bool(body.get("delete_torrent")))
+                    r = remove_game(s("platform"), s("name"), rid, bool(body.get("delete_torrent")))
                 elif not rid:
                     raise ValueError("RomM hasn't scanned this game yet; try again in a minute")
                 elif act == "apply":
@@ -1748,38 +2459,45 @@ class H(BaseHTTPRequestHandler):
                     r = meta_unmatch(rid)
                 else:
                     return self.send(404, {"error": "not found"})
-                log("  by", who)
+                self.by()
                 return self.send(200, r)
-            if self.path in ("/api/collections", "/api/collections/delete"):
-                if not is_admin(self.headers):
-                    return self.send(403, {"error": "admins only"})
-                r = save_collection(body) if self.path == "/api/collections" else delete_collection(str(body.get("id", "")))
-                log("  by", self.headers.get("Remote-User", "?"))
+            if path in ("/api/collections", "/api/collections/delete"):
+                self.need("admin")
+                r = save_collection(body) if path == "/api/collections" else delete_collection(s("id"))
+                self.by()
                 return self.send(200, r)
-            if self.path == "/api/cancel":
-                if not is_admin(self.headers):
-                    return self.send(403, {"error": "admins only"})
-                r = cancel_download(str(body.get("hash", "")).lower())
-                log("  by", self.headers.get("Remote-User", "?"))
+            if path == "/api/cancel":
+                self.need("admin")
+                r = cancel_download(s("hash").lower())
+                self.by()
                 return self.send(200, r)
-            if self.path == "/api/peek":
-                return self.send(200, peek(str(body.get("id", ""))))
-            if self.path == "/api/grab":
-                grab(str(body.get("id", "")), str(body.get("platform", "")),
-                     str(body.get("kind") or "rom"), learn=bool(body.get("learn")))
-                log("  by", self.headers.get("Remote-User", "?"))
+            if path == "/api/peek":
+                if not (self.p["download"] or self.p["bios"]):
+                    self.need("download")
+                return self.send(200, peek(s("id")))
+            if path == "/api/grab":
+                kind = s("kind") or "rom"
+                self.need("bios" if kind == "bios" else "download")
+                grab(s("id"), s("platform"), kind, learn=bool(body.get("learn")))
+                self.by()
                 return self.send(200, {"ok": True})
-            if self.path == "/api/firmware/delete":
-                info = delete_firmware(str(body.get("platform", "")), str(body.get("file", "")))
-                log("  by", self.headers.get("Remote-User", "?"))
+            if path == "/api/firmware/delete":
+                self.need("bios")
+                self.need_platform(s("platform"))
+                info = delete_firmware(s("platform"), s("file"))
+                self.by()
                 return self.send(200, info)
-            if self.path == "/api/platforms":
-                info = add_platform(str(body.get("platform", "")))
-                log("  by", self.headers.get("Remote-User", "?"))
+            if path == "/api/platforms":
+                self.need("bios")
+                info = add_platform(s("platform"))
+                self.by()
                 return self.send(200, info)
             return self.send(404, {"error": "not found"})
+        except Denied as e:
+            return self.send(e.code, {"error": str(e)})
         except PlatformMissing as e:
-            return self.send(409, {"error": "platform_missing", "platform": platform_info(str(e))})
+            return self.send(409, {"error": "platform_missing", "platform": platform_info(str(e)),
+                                   "can_add": bool(self.p and self.p["bios"])})
         except ValueError as e:
             return self.send(400, {"error": str(e)})
         except Exception as e:
@@ -1787,11 +2505,39 @@ class H(BaseHTTPRequestHandler):
             return self.send(502, {"error": str(e)})
 
 
+def cli_passwd(uname):
+    """Locked out? `docker exec -it romseek python3 /app/romseek.py passwd NAME`, then restart."""
+    import getpass
+    load_auth()
+    uname = uname.strip().lower()
+    pw = getpass.getpass(f"New password for {uname}: ")
+    check_new_password(pw)
+    if getpass.getpass("Again: ") != pw:
+        raise SystemExit("Passwords don't match.")
+    with AUTH_LOCK:
+        u = _DB["users"].get(uname)
+        if u and u.get("source") != "local" and not u.get("password"):
+            raise SystemExit(f"{uname} signs in through {u.get('source')}; change the password there.")
+        if not u:
+            u = _DB["users"][uname] = {"source": "local", "name": uname, "email": "", "groups": [], "created": int(time.time())}
+        u.update(password=hash_password(pw), admin=True, disabled=False)
+        save_db()
+    print(f"{uname} is now an admin with the new password. Restart RomSeek: docker restart romseek")
+
+
 if __name__ == "__main__":
+    import sys
+    if len(sys.argv) == 3 and sys.argv[1] == "passwd":
+        cli_passwd(sys.argv[2])
+        raise SystemExit(0)
     os.makedirs(STATE_DIR, exist_ok=True)
     load_status()
     load_titles(); load_learned()
+    load_auth()
     threading.Thread(target=importer_loop, daemon=True).start()
     threading.Thread(target=titles_loop, daemon=True).start()
-    log(f"romseek on :{PORT}; library {LIBRARY}; category {CATEGORY}")
+    if LLDAP_URL and LLDAP_SYNC_USER:
+        threading.Thread(target=lldap_loop, daemon=True).start()
+    log(f"romseek on :{PORT}; library {LIBRARY}; category {CATEGORY}; "
+        f"sign-in: local{' + LLDAP' if LLDAP_LOGIN else ''}{' + proxy headers' if PROXY_AUTH else ''}")
     ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()

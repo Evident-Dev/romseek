@@ -8,7 +8,7 @@ Thanks for helping. Keep changes small and focused.
 - The backend stays in `romseek.py`. The frontend stays in `index.html`. There is no build step.
 - Never add a feature that imports a file before the safety checks run.
 - Don't add links to, or search presets for, ROM/BIOS sites, trackers or decryption keys. Official sources (a console maker's own firmware page, an emulator's own website) are fine. See [docs/legal.md](docs/legal.md).
-- RomSeek has no login. Any new admin-only endpoint must check `is_admin(self.headers)` first, like the existing ones.
+- Every `/api/` route needs a signed-in user (see `H.PUBLIC` for the few exceptions). Check permissions with `self.need("admin" | "download" | "bios")` and `self.need_platform(slug)`, like the existing routes.
 
 ## Run it locally
 

@@ -20,7 +20,7 @@ Every page has its own address (`#library/<system>`, `#library/c/<collection>`, 
 
 ### Admin menu
 
-Users in the `admins` group get a ⋮ menu on each game. The group comes from your login proxy's `Remote-Groups` header. Change it with `ADMIN_GROUPS`.
+Admins get a ⋮ menu on each game. See [Users and groups](#users-and-groups) for who is an admin.
 
 - **Metadata lookup:** search every metadata source RomM has turned on, and pick the right match.
   - If a name finds nothing, RomSeek retries with the closest real titles from its title list and shows them as **Try:** suggestions.
@@ -35,6 +35,15 @@ For more metadata matches:
 - **LaunchBox:** set `ENABLE_SCHEDULED_UPDATE_LAUNCHBOX_METADATA=true` in RomM. Run its **Update LaunchBox metadata** task once.
 - **ScreenScraper** and **IGDB:** make free accounts. Add them to RomM (`SCREENSCRAPER_USER`, `SCREENSCRAPER_PASSWORD`, `IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET`).
 
+### Users and groups
+
+Admins get a **Users** tab.
+
+- **Users:** everyone who has signed in (or been synced from LLDAP), with where they sign in from, their groups and when they were last seen. Add RomSeek accounts with **+ New user**, reset their passwords, add them to groups, make them admins, or disable them.
+- **Groups:** each group decides which platforms and game ratings its members see, and whether they can download games and add platforms/BIOS. Groups from LLDAP or your SSO show up on their own; you can also make RomSeek-only groups. People in no set-up group get **Default**.
+
+Details: [Groups and permissions](setup.md#groups-and-permissions).
+
 ### Collections
 
 Open **Library → Collections**.
@@ -45,7 +54,7 @@ Open **Library → Collections**.
 
 ### Homepage dashboard widget
 
-`/api/stats` returns pending downloads, game count and system count. For [Homepage](https://gethomepage.dev):
+`/api/stats` returns pending downloads, game count and system count. It works without signing in (counts only), so Homepage can reach it on the Docker network. For [Homepage](https://gethomepage.dev):
 
 ```yaml
 - RomSeek:
