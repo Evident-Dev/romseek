@@ -147,16 +147,98 @@ The log should show no errors. On first start RomSeek creates a `roms` category 
 
 ### Step 7. Put it behind your proxy
 
-Example for Caddy with Authelia:
+RomSeek has no login screen and no settings page. Your reverse proxy handles
+the login, and all settings live in `romseek.env` (see [Configuration](configuration.md)).
+
+#### How login and admin work
+
+1. Someone opens `https://roms.example.com`.
+2. Your proxy asks your login service (Authelia here) whether they are signed in.
+   This is called **forward auth**. If they aren't signed in, they get the login page.
+3. Once they are signed in, Authelia answers with headers that describe the user:
+
+   | Header | Example |
+   |---|---|
+   | `Remote-User` | `alex` |
+   | `Remote-Name` | `Alex Smith` |
+   | `Remote-Email` | `alex@example.com` |
+   | `Remote-Groups` | `admins,family` |
+
+4. The proxy copies those headers onto the request it passes to RomSeek.
+5. RomSeek reads `Remote-Groups`. If one of the groups is in `ADMIN_GROUPS`
+   (default `admins`), that person gets the admin tools.
+
+Nothing has to "trigger" the admin header. It comes with every request from a
+signed-in user. To make someone an admin, put them in the `admins` group in
+Authelia (for example `groups: [admins]` in `users_database.yml`, or the
+matching LDAP group), or set `ADMIN_GROUPS` to a group you already use.
+
+#### Caddy + Authelia
 
 ```
+(authelia) {
+    forward_auth authelia:9091 {
+        uri /api/authz/forward-auth
+        copy_headers Remote-User Remote-Groups Remote-Name Remote-Email
+    }
+}
+
 roms.example.com {
-    import authelia          # your login snippet
+    import authelia
     reverse_proxy romseek:8000
 }
 ```
 
-Reload your proxy. Open `https://roms.example.com`. You should see the login page first, then RomSeek.
+> ⚠️ The `copy_headers` line matters. Without it you still get the login page,
+> but RomSeek never sees any groups, so nobody gets the admin tools.
+
+#### Traefik + Authelia
+
+Labels on the `romseek` service:
+
+```yaml
+labels:
+  - traefik.enable=true
+  - traefik.http.routers.romseek.rule=Host(`roms.example.com`)
+  - traefik.http.routers.romseek.middlewares=authelia@docker
+  - traefik.http.services.romseek.loadbalancer.server.port=8000
+  # Define the middleware once (often on the authelia container):
+  - traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/authz/forward-auth
+  - traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true
+  - traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email
+```
+
+#### Authentik
+
+Login works through Authentik's proxy outpost, but Authentik names its headers
+differently (`X-authentik-groups`, with groups separated by `|`). RomSeek only
+reads `Remote-Groups` for now, so the admin tools won't show up with Authentik.
+
+#### Check it
+
+Reload your proxy and open `https://roms.example.com`. You should see the login
+page first, then RomSeek. Then open `https://roms.example.com/api/config`:
+
+- `"admin": true` means your groups came through and you're an admin.
+- `"admin": false` for an admin account means the groups header isn't reaching
+  RomSeek. Check the `copy_headers` / `authResponseHeaders` line and the user's
+  groups in Authelia.
+
+#### Who can do what
+
+| | Anyone who can sign in | Admins only |
+|---|---|---|
+| Browse the library, play, download | ✅ | |
+| Search and grab downloads | ✅ | |
+| Add systems, upload or delete BIOS files | ✅ | |
+| Fix metadata, edit or remove games | | ✅ |
+| Make or delete collections | | ✅ |
+| Cancel downloads | | ✅ |
+
+> ⚠️ Searching and grabbing start real downloads, and anyone who can get past
+> your login can do them. Limit who can open RomSeek in your login service.
+> With Authelia, use an access rule like `subject: 'group:admins'` for
+> `roms.example.com`.
 
 ### Step 8. Link RomM (recommended)
 

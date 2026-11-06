@@ -16,7 +16,7 @@ Put these in `romseek.env`. Only `PROWLARR_KEY` is required.
 | `ROMM_API_TOKEN` | none | RomM client token. Turns on the Library and admin menu. |
 | `SCAN_STATE` | none | Virus scan gate file. See [Virus scanning](virus-scanning.md). |
 | `EXCLUDED_INDEXERS` | `LimeTorrents` | Prowlarr indexers to hide, comma-separated. |
-| `ADMIN_GROUPS` | `admins` | Login groups that get the admin menu, comma-separated. |
+| `ADMIN_GROUPS` | `admins` | Login groups that get the admin menu, comma-separated. Matched against the `Remote-Groups` header from your proxy ([how that works](setup.md#how-login-and-admin-work)). |
 | `POLL_SECONDS` | `60` | How often RomSeek checks for finished downloads. |
 | `UPLOAD_MAX_MB` | `1024` | Biggest BIOS file you can upload. |
 | `STATE_DIR` | `/state` | Where RomSeek keeps its own data. |
