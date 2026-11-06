@@ -13,7 +13,8 @@ services:
       # Mount the same parent folder qBittorrent uses, at the same path, so
       # download paths match and hardlinks into the RomM library work.
       - /srv:/data
-      # Optional virus-scan gate (see SCAN_STATE in .env.example):
+      # Optional virus-scan gate (README: Virus scanning, Option B).
+      # Then set SCAN_STATE=/scan/last-run in romseek.env.
       # - /var/lib/clamav-scan:/scan:ro
     # No ports: put it behind your authenticating reverse proxy on this network.
     networks: [default]
