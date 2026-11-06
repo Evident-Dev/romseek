@@ -122,6 +122,9 @@ BIOS_QUERY = {
     "neogeomvs": "neogeo bios", "arcade": "mame bios", "gba": "gba bios", "nds": "nds bios",
     "xbox": "xbox bios mcpx",
 }
+# Systems whose files must come from the user's own console: no search presets,
+# only "dump it yourself" guidance and the Upload button.
+BIOS_DUMP_ONLY = {"switch", "wiiu", "3ds"}
 # Firmware RomM wants as the zip itself (e.g. neogeo.zip), never extracted.
 KEEP_ZIP = {"neogeoaes", "neogeomvs", "arcade",
             "switch"}  # Switch emulators install firmware from the zip itself
@@ -337,6 +340,7 @@ def platform_info(slug):
         "bios_query": BIOS_QUERY.get(slug, ""), "browser": slug in BROWSER,
         "bios_note": BIOS_NOTE.get(slug, ""),
         "bios_official": dict(zip(("label", "url"), BIOS_OFFICIAL[slug])) if slug in BIOS_OFFICIAL else None,
+        "bios_dump": slug in BIOS_DUMP_ONLY,
     }
 
 

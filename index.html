@@ -614,11 +614,12 @@ function addPlatformDialog(p, forGame) {
     $('#dBiosNote').hidden = !pickBios;
     $('#dBiosNote').textContent = !pickBios ? '' : p.bios_official
       ? `${p.bios_note} Next you'll get a link to Sony's download page.`
+      : p.bios_dump ? `${p.bios_note} Next you can upload the files from your console.`
       : p.bios === 'required'
       ? `${p.label} needs BIOS files to play. Next you'll pick a BIOS download from the available torrents.`
       : `${p.label} works best with BIOS files. Next you'll pick a BIOS download from the available torrents (you can close it to skip).`;
     $('#dWarn').textContent = p.browser ? '' : `RomM can store ${p.label} games but can't play them in the browser.`;
-    $('#dOk').textContent = pickBios ? (p.bios_official ? (forGame ? 'Add platform & download' : 'Add platform') : (forGame ? 'Add, download & pick BIOS' : 'Add & pick BIOS'))
+    $('#dOk').textContent = pickBios ? (p.bios_official || p.bios_dump ? (forGame ? 'Add platform & download' : 'Add platform') : (forGame ? 'Add, download & pick BIOS' : 'Add & pick BIOS'))
                                      : (forGame ? 'Add platform & download' : 'Add platform');
     const done = v => { $('#dlg').close(); resolve(v); };
     $('#dOk').onclick = async () => {
@@ -646,7 +647,7 @@ async function loadPlatforms() {
       ${p.bios_note ? `<div class="sub">${esc(p.bios_note)}</div>` : ''}
       ${p.bios && !p.bios_files ? `<div class="row">${p.bios_official
           ? `<a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a>`
-          : `<button class="sm ${p.bios_files ? 'ghost' : ''}" data-bios="${p.slug}">${p.bios_files ? 'Get more BIOS' : 'Get BIOS'}</button>`}
+          : `<button class="sm ${p.bios_files ? 'ghost' : ''}" data-bios="${p.slug}">${p.bios_dump ? 'Add BIOS files' : p.bios_files ? 'Get more BIOS' : 'Get BIOS'}</button>`}
         <button class="sm ghost" data-upload="${p.slug}">Upload firmware</button></div>` : ''}
     </div>`).join('')}</div>`
     : `<div class="empty">No platforms yet. Add one below, or just grab a game and you'll be asked to add its platform.</div>`;
@@ -675,8 +676,17 @@ function openBios(slug) {
   const p = P(slug); biosSlug = slug;
   show('platforms');
   $('#biosPanel').hidden = false;
-  $('#biosTitle').textContent = p.bios_official ? `Firmware for ${p.label}` : `Find BIOS for ${p.label}`;
-  $('#bf').hidden = !!p.bios_official;
+  $('#biosTitle').textContent = p.bios_official || p.bios_dump ? `Firmware for ${p.label}` : `Find BIOS for ${p.label}`;
+  $('#bf').hidden = !!(p.bios_official || p.bios_dump);
+  if (p.bios_dump) {
+    const emu = p.emulators?.[0];
+    $('#biosHelp').innerHTML = `${esc(p.bios_note)} RomSeek doesn't search for these: they have to come from a console you own.`;
+    $('#bres').innerHTML = `<div class="row">${emu ? `<a class="btn ghost" href="${esc(emu.url)}" target="_blank" rel="noopener">${esc(emu.name)} setup guide ↗</a>` : ''}
+      <button class="sm" data-upload="${p.slug}">Upload your files</button></div>
+      <p class="help">Uploading keeps a copy in RomM, so you can download it on the device you play on.</p>`;
+    $('#biosPanel').scrollIntoView({behavior: 'smooth', block: 'start'});
+    return;
+  }
   if (p.bios_official) {
     $('#biosHelp').innerHTML = `${esc(p.bios_note)} Install it in the emulator on the device you play on.`;
     $('#bres').innerHTML = `<div class="row"><a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">1. ${esc(p.bios_official.label)} ↗</a>
@@ -737,7 +747,7 @@ async function openFw(slug) {
   fwSlug = slug; const p = P(slug);
   $('#fwTitle').textContent = `${p.label} BIOS files`;
   $('#fwq').value = ''; $('#fwList').innerHTML = '<div class="msg" style="padding:12px">Loading…</div>';
-  $('#fwFind').hidden = !!p.bios_official;
+  $('#fwFind').hidden = !!(p.bios_official || p.bios_dump);
   if (!$('#fwdlg').open) $('#fwdlg').showModal();
   try { FW = await api('api/firmware?platform=' + encodeURIComponent(slug)); } catch (e) { FW = []; toast('Could not list files: ' + e.message, 'bad'); }
   renderFw();
@@ -1221,7 +1231,7 @@ function biosStep(p, files) {
   const tag = `<span class="pill ${p.bios_files ? 'good' : p.bios === 'required' ? 'need' : 'soft'}">${p.bios_files ? 'Available ✓' : 'BIOS ' + esc(p.bios)}</span>`;
   const note = p.bios_note ? `<p>${esc(p.bios_note)}</p>` : '';
   if (!p.bios_files) return `<div class="row">${tag}</div>${note}
-    ${CFG.admin ? `<div class="row">${p.bios_official ? `<a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a>` : `<button class="sm" data-bios="${p.slug}">Find BIOS</button>`}
+    ${CFG.admin ? `<div class="row">${p.bios_official ? `<a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a>` : `<button class="sm" data-bios="${p.slug}">${p.bios_dump ? 'Add BIOS files' : 'Find BIOS'}</button>`}
         <button class="sm ghost" data-upload="${p.slug}">Upload firmware</button></div>` : '<p>An admin needs to add it before this system will run.</p>'}`;
   const list = files === null ? '<p class="help">Loading files…</p>'
     : !files.length ? `<div class="row"><a class="btn ghost" href="${rommPlat(p)}" target="_blank" rel="noopener">Get it from RomM ↗</a></div>`
@@ -1240,7 +1250,7 @@ function setupBoxes(p) {
                  <button class="sm ghost" data-managefw="${p.slug}">Manage BIOS files</button></div>
                  ${p.romm_id ? `<div class="row"><a class="btn ghost" href="${rommPlat(p)}" target="_blank" rel="noopener">Download from RomM ↗</a></div>` : ''}`
              : `<div class="row">${p.bios_official ? `<a class="btn" href="${esc(p.bios_official.url)}" target="_blank" rel="noopener">${esc(p.bios_official.label)} ↗</a>`
-                                                  : `<button class="sm" data-bios="${p.slug}">Find BIOS</button>`}
+                                                  : `<button class="sm" data-bios="${p.slug}">${p.bios_dump ? 'Add BIOS files' : 'Find BIOS'}</button>`}
                  <button class="sm ghost" data-upload="${p.slug}">Upload firmware</button></div>`}
     </div>`);
   }
