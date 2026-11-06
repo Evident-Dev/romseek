@@ -300,6 +300,11 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
 .efields textarea{resize:vertical;font:inherit;background:var(--bg-2);border:1px solid var(--line-strong);padding:9px 11px;color:var(--text)}
 .erow{display:grid;grid-template-columns:110px 1fr;gap:10px}
 @media (max-width:600px){.eform{grid-template-columns:1fr}.eprev{display:none}.mres .hit{grid-template-columns:56px 1fr}.mres .hit img,.mres .hit .noimg{width:56px;height:75px}.mres .hit button{grid-column:1/-1}}
+.stwrap{display:flex;align-items:center;justify-content:flex-end;gap:10px}
+.stwrap>div{text-align:right}
+.xcancel{width:28px;height:28px;padding:0;flex:none;display:inline-flex;align-items:center;justify-content:center;font-size:13px;line-height:1;background:transparent!important;border:1px solid var(--line-strong);color:var(--muted)}
+.xcancel:hover{color:var(--bad)!important;border-color:var(--bad)!important;box-shadow:none!important;background:rgba(224,86,111,.08)!important}
+@media (max-width:700px){.stwrap{justify-content:flex-start}.stwrap>div{text-align:left}}
 </style>
 </head>
 <body>
@@ -578,9 +583,9 @@ $('#bres').onclick = async e => {
   } catch (err) { b.disabled = false; b.textContent = 'Grab BIOS'; toast('Grab failed: ' + err.message, 'bad'); }
 };
 
-function confirmBox(title, body, yes) {
+function confirmBox(title, body, yes, no = 'Cancel') {
   return new Promise(resolve => {
-    $('#cTitle').textContent = title; $('#cBody').textContent = body; $('#cYes').textContent = yes;
+    $('#cTitle').textContent = title; $('#cBody').textContent = body; $('#cYes').textContent = yes; $('#cNo').textContent = no;
     const done = v => { $('#cdlg').close(); resolve(v); };
     $('#cYes').onclick = () => done(true); $('#cNo').onclick = () => done(false);
     $('#cdlg').oncancel = ev => { ev.preventDefault(); done(false); };
@@ -812,11 +817,12 @@ async function refreshActivity() {
     <td class="n">${esc(P(x.platform).label)}${x.kind === 'bios' ? ' · BIOS' : ''}</td><td class="n">${size(x.size)}</td>
     <td class="n">${peersCell(x)}</td>
     <td class="n">${x.added ? ago(x.added) : ''}</td>
-    <td class="a">${statusCell(x)}</td></tr>`).join('')}</tbody></table>
+    <td class="a"><div class="stwrap"><div>${statusCell(x)}</div>${CFG.admin && x.state === 'downloading'
+      ? `<button class="xcancel" data-cancel="${esc(x.hash)}" data-name="${esc(x.name)}" title="Cancel download" aria-label="Cancel download of ${esc(x.name)}">✕</button>` : ''}</div></td></tr>`).join('')}</tbody></table>
     <p class="help">Peers: connected now, with how many exist in the swarm in brackets.</p>`;
 }
 let LIB = [], CFG = {romm: '', linked: false}, libPlat = '';
-api('api/config').then(c => { CFG = c; if (c.admin && LIB.length) renderLib(); if (c.romm) $('#rommLink').href = c.romm; else $('#rommLink').hidden = true; }).catch(() => {});
+api('api/config').then(c => { CFG = c; if (c.admin) { refreshActivity(); if (LIB.length) renderLib(); } if (c.romm) $('#rommLink').href = c.romm; else $('#rommLink').hidden = true; }).catch(() => {});
 const logo = slug => `api/logo/${slug}`;
 const logoImg = (p, cls) => `<img src="${logo(p.slug)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;fallback&quot;>${esc(p.label)}</div>'">`;
 const rommRom = (g, play) => `${CFG.romm}/rom/${g.romm_id}${play ? '/ejs' : ''}`;
@@ -929,6 +935,15 @@ const setHdr = () => document.documentElement.style.setProperty('--hdr', documen
 addEventListener('resize', setHdr); setHdr();
 $('#setup').onclick = e => { const b = e.target.closest('[data-bios]'); if (b) openBios(b.dataset.bios); };
 $('#lq').oninput = renderLib; $('#lsort').onchange = renderLib;
+
+/* ---------------- cancel a download ---------------- */
+$('#activity').addEventListener('click', async e => {
+  const b = e.target.closest('[data-cancel]'); if (!b) return;
+  if (!await confirmBox(`Cancel ${b.dataset.name}?`, 'The torrent and anything downloaded so far are deleted. You can grab it again later.', 'Cancel download', 'Keep downloading')) return;
+  b.disabled = true;
+  try { await api('api/cancel', {hash: b.dataset.cancel}); toast('Download cancelled', 'good'); refreshActivity(); }
+  catch (err) { toast(err.message, 'bad'); b.disabled = false; }
+});
 
 /* ---------------- admin: per-game menu ---------------- */
 const gkey = g => g.platform + '/' + g.name;

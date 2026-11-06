@@ -1043,7 +1043,7 @@ def queue():
             state = st.get("state", "waiting")
         kind, slug = tag_target(tags)
         out.append({
-            "name": t["name"], "progress": t.get("progress", 0), "size": t.get("size", 0),
+            "hash": t["hash"], "name": t["name"], "progress": t.get("progress", 0), "size": t.get("size", 0),
             "added": t.get("added_on", 0),
             "eta": t.get("eta"), "dlspeed": t.get("dlspeed", 0), "seeds": t.get("num_seeds", 0),
             "peers": t.get("num_leechs", 0), "seeds_total": t.get("num_complete", 0),
@@ -1052,6 +1052,23 @@ def queue():
             "state": state, "detail": st.get("detail", ""),
         })
     return out
+
+
+def cancel_download(h):
+    """Cancel a RomSeek download that hasn't finished: delete the torrent and its
+    partial data. Finished ones (waiting for the virus scan) can't be cancelled."""
+    if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", h or ""):
+        raise ValueError("bad torrent id")
+    ts = json.loads(qbit("torrents/info?" + urllib.parse.urlencode({"category": CATEGORY, "hashes": h})))
+    if not ts:
+        raise ValueError("that download isn't in RomSeek's queue any more")
+    t = ts[0]
+    if finished(t):
+        raise ValueError("already downloaded; it's waiting for the virus scan and will be imported")
+    qbit("torrents/delete", {"hashes": h, "deleteFiles": "true"})
+    STATUS.pop(h, None); save_status()
+    log("download cancelled", t["name"])
+    return {"ok": True, "name": t["name"]}
 
 
 # ---------------------------------------------------------------- firmware upload
@@ -1575,6 +1592,12 @@ class H(BaseHTTPRequestHandler):
                 else:
                     return self.send(404, {"error": "not found"})
                 log("  by", who)
+                return self.send(200, r)
+            if self.path == "/api/cancel":
+                if not is_admin(self.headers):
+                    return self.send(403, {"error": "admins only"})
+                r = cancel_download(str(body.get("hash", "")).lower())
+                log("  by", self.headers.get("Remote-User", "?"))
                 return self.send(200, r)
             if self.path == "/api/peek":
                 return self.send(200, peek(str(body.get("id", ""))))
