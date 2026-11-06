@@ -1110,6 +1110,33 @@ def queue():
     return out
 
 
+def stats():
+    """Counts for dashboard widgets. Download numbers are None when qBittorrent is unreachable."""
+    out = {"roms": len(library()),
+           "platforms": sum(1 for s_, _, _ in PLATFORMS if platform_exists(s_)),
+           "downloading": None, "waiting": None, "pending": None, "speed": None,
+           "imported_7d": None, "blocked": None}
+    try:
+        torrents = json.loads(qbit(f"torrents/info?category={CATEGORY}"))
+    except Exception:
+        return out
+    week = time.time() - 7 * 86400
+    dl = wait = imp = blk = speed = 0
+    for t in torrents:
+        tags = {x.strip() for x in t.get("tags", "").split(",")}
+        speed += t.get("dlspeed", 0) or 0
+        if "blocked" in tags:
+            blk += 1
+        elif "imported" in tags:
+            imp += (t.get("completion_on") or 0) >= week
+        elif not finished(t):
+            dl += 1
+        else:
+            wait += 1  # finished, waiting for the virus scan / import
+    out.update(downloading=dl, waiting=wait, pending=dl + wait, speed=speed, imported_7d=imp, blocked=blk)
+    return out
+
+
 def cancel_download(h):
     """Cancel a RomSeek download that hasn't finished: delete the torrent and its
     partial data. Finished ones (waiting for the virus scan) can't be cancelled."""
@@ -1658,12 +1685,7 @@ class H(BaseHTTPRequestHandler):
                                        "romm_error": romm_index()["error"]})
             if u.path == "/api/stats":
                 # For dashboard widgets (e.g. Homepage "customapi"): small, cheap counts.
-                try:
-                    pending = sum(1 for q in queue() if q["state"] in ("downloading", "waiting"))
-                except Exception:
-                    pending = None
-                return self.send(200, {"pending": pending, "roms": len(library()),
-                                       "platforms": sum(1 for s_, _, _ in PLATFORMS if platform_exists(s_))})
+                return self.send(200, stats())
             if u.path == "/api/library":
                 return self.send(200, library())
             if u.path == "/api/queue":
