@@ -972,19 +972,71 @@ def import_torrent(t, slug, kind="rom"):
     if kind == "bios":
         return import_bios(wanted, slug)
 
+    roms, bios, extras = split_files(wanted)
+    parts, notes = [], []
+    if bios:
+        _, d = import_bios(bios, slug)
+        parts.append(f"BIOS: {d}")
+    if extras:
+        notes.append(f"skipped {len(extras)} emulator/tool file(s)")
+    linked = link_roms(t, roms, slug)
+    parts.insert(0, f"{linked} file(s) -> {slug}")
+    return "imported", "; ".join(parts) + (f" ({'; '.join(notes)})" if notes else "")
+
+
+# Folders/files inside a game torrent that are not games. BIOS goes to
+# library/bios/<slug>/ (RomM firmware); emulators/tools are never imported:
+# they are unverified binaries and RomSeek links the official emulators.
+BIOS_RX = re.compile(r"\b(bios|firmware|ipl ?rom|bootrom|syscard)\b", re.I)
+EXTRA_DIR_RX = re.compile(r"\b(emulators?|emus?|tools?|utilit(y|ies)|frontends?|programs?|apps?|software|patch(es|er)?|cheats?)\b", re.I)
+# Emulator names unambiguous enough to match a file name ("Ecco the Dolphin" is a game).
+EXTRA_FILE_RX = re.compile(r"\b(mupen\w*|project ?64|retroarch|openemu|dolphin[- ]?(emu|x64)|pcsx\w*|epsxe|duckstation|"
+                           r"snes9x|zsnes|visualboy\w*|mgba|desmume|melonds|ppsspp|redream|ryujinx|citra|cemu|emulator)\b", re.I)
+
+
+def split_files(wanted):
+    """-> (roms, bios, extras), judged by the folders below the torrent root
+    and (more strictly) the file name."""
+    roms, bios, extras = [], [], []
+    for name, p in wanted:
+        parts = name.replace("\\", "/").split("/")
+        dirs = " ".join(parts[1:-1]).replace("_", " ")
+        fname = os.path.splitext(parts[-1])[0].replace("_", " ").replace(".", " ")
+        if EXTRA_DIR_RX.search(dirs) or EXTRA_FILE_RX.search(fname):
+            extras.append((name, p))
+        elif BIOS_RX.search(dirs) or BIOS_RX.search(fname):
+            bios.append((name, p))
+        else:
+            roms.append((name, p))
+    return roms, bios, extras
+
+
+def link_roms(t, roms, slug):
+    """One RomM game per file for single-file formats (packs are flattened);
+    multi-file games (cue/bin, gdi, ...) become one folder each. In a pack with
+    per-game subfolders, each subfolder is its own game."""
     dest_dir = os.path.join(LIBRARY, slug)
     linked = 0
-    exts = {os.path.splitext(p)[1].lower() for _, p in wanted}
-    if len(wanted) == 1 or exts <= STANDALONE_EXT:
-        for _, p in wanted:
+    groups = {}
+    for name, p in roms:
+        parts = name.replace("\\", "/").split("/")
+        if len(roms) == 1 or os.path.splitext(p)[1].lower() in STANDALONE_EXT:
             linked += link(p, os.path.join(dest_dir, safe_name(os.path.basename(p))))
-    else:
-        game = os.path.join(dest_dir, safe_name(t["name"]))
-        for name, p in wanted:
-            parts = name.split("/")
-            rel = parts[1:] if len(parts) > 1 else parts
-            linked += link(p, os.path.join(game, *[safe_name(x) for x in rel]))
-    return "imported", f"{linked} file(s) -> {slug}"
+        else:
+            groups.setdefault(tuple(parts[:-1]), []).append((parts, p))
+    if not groups:
+        return linked
+    # Per-subfolder games only when it clearly is a pack of game folders.
+    subdirs = {k[1] for k in groups if len(k) >= 2}
+    per_dir = len(subdirs) >= PACK_MIN_ARCHIVES and bool(PACK_RX.search(t["name"]))
+    for key, files in groups.items():
+        for parts, p in files:
+            if per_dir and len(parts) >= 3:
+                game, rel = parts[1], parts[2:]
+            else:
+                game, rel = t["name"], (parts[1:] if len(parts) > 1 else parts)
+            linked += link(p, os.path.join(dest_dir, safe_name(game), *[safe_name(x) for x in rel]))
+    return linked
 
 
 def finished(t):
