@@ -1752,7 +1752,7 @@ def load_auth():
             with open(USERS_FILE) as f:
                 d = json.load(f)
             _DB["users"], _DB["groups"] = d.get("users", {}), d.get("groups", {})
-            for k in ("profiles", "ldap_groups"):
+            for k in ("profiles", "ldap_groups", "ldap_ok_at"):
                 if k in d:
                     _DB[k] = d[k]
         except FileNotFoundError:
@@ -2062,6 +2062,11 @@ def lldap_sync():
         for n in gone:
             drop_sessions(n)
         _SYNC.update(t=time.time(), error="", count=len(seen))
+        with AUTH_LOCK:
+            if not _DB.get("ldap_ok_at"):
+                _DB["ldap_ok_at"] = int(time.time())   # setup done: the sync password is never shown again
+                save_db()
+                audit("system", "settings.lldap_connected", LLDAP_SYNC_USER, users=len(seen))
     except Exception as e:
         _SYNC.update(t=time.time(), error=str(e))
         log("LLDAP sync error:", repr(e))
@@ -2208,6 +2213,32 @@ def admin_overview():
             "profiles": profs, "gamedb": {"games": len(_LB["by_id"]), "at": _LB["t"], "error": _LB["error"],
                                           "building": _LB["building"]},
             "proxy": PROXY_AUTH, "admin_groups": sorted(ADMIN_GROUPS)}
+
+
+def lldap_secret_shown():
+    """The sync password may be shown to admins only until LLDAP has accepted it once."""
+    return bool(LLDAP_MANAGED and LLDAP_SYNC_PASSWORD and not _DB.get("ldap_ok_at"))
+
+
+def signin_overview():
+    return {
+        "proxy": {"on": PROXY_AUTH, "user_header": PROXY_USER_HDR, "groups_header": PROXY_GROUPS_HDR,
+                  "name_header": PROXY_NAME_HDR, "email_header": PROXY_EMAIL_HDR},
+        "lldap": {"url": LLDAP_URL, "login": LLDAP_LOGIN, "sync_user": LLDAP_SYNC_USER, "managed": LLDAP_MANAGED,
+                  "minutes": LLDAP_SYNC_MINUTES, "error": _SYNC["error"], "count": _SYNC["count"], "at": int(_SYNC["t"]),
+                  "connected_at": _DB.get("ldap_ok_at"), "secret_available": lldap_secret_shown(),
+                  "service_groups": sorted(LLDAP_SERVICE_GROUPS)},
+        "admin_groups": sorted(ADMIN_GROUPS), "local_login": True, "session_days": SESSION_DAYS,
+        "gamedb": {"games": len(_LB["by_id"]), "at": _LB["t"], "error": _LB["error"], "building": _LB["building"]},
+        "audit_days": AUDIT_DAYS,
+    }
+
+
+def lldap_secret(me):
+    if not lldap_secret_shown():
+        raise Denied(410, "LLDAP is set up, so the sync password is no longer shown. It's in romseek.env.")
+    audit(me, "settings.secret_viewed", "LLDAP_SYNC_PASSWORD")
+    return {"user": LLDAP_SYNC_USER, "password": LLDAP_SYNC_PASSWORD}
 
 
 def _str_list(v, allowed):
@@ -3149,6 +3180,9 @@ class H(BaseHTTPRequestHandler):
             if u.path == "/api/admin/users":
                 self.need("admin")
                 return self.send(200, admin_overview())
+            if u.path == "/api/admin/signin":
+                self.need("admin")
+                return self.send(200, signin_overview())
             if u.path == "/api/admin/audit":
                 self.need("admin")
                 return self.send(200, audit_read(g("user"), g("action"), g("q"), int(g("before", "0") or 0)))
@@ -3247,6 +3281,8 @@ class H(BaseHTTPRequestHandler):
                 elif act == "sync":
                     r = lldap_sync()
                     self.audit("user.sync", "LLDAP", ok=r.get("ok"), count=r.get("count"), error=r.get("error"))
+                elif act == "lldap/secret":
+                    r = lldap_secret(self.who)
                 elif act == "profiles":
                     r = save_profile(body, self.who)
                 elif act == "profiles/delete":

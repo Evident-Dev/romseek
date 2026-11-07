@@ -37,7 +37,7 @@ For more metadata matches:
 
 ### Users and groups
 
-Admins get a **Users** tab.
+Admins get **Settings** (gear icon) with Users & groups, Sign-in (SSO, LLDAP and the ratings database, with setup steps when something isn't connected yet), Auto-approval and the Audit log.
 
 - **Users:** everyone who has signed in (or been synced from LLDAP), with where they sign in from, their groups and when they were last seen. Add RomSeek accounts with **+ New user**, reset their passwords, add them to groups, make them admins, or disable them.
 - **Groups:** each group decides which platforms and game ratings its members see, whether they can request games and platforms/BIOS, and whether they can approve requests. Groups from LLDAP or your SSO show up on their own. With the LLDAP sync account set, LLDAP owns the groups and who is in them. People in no set-up group get **Default**.
@@ -56,7 +56,7 @@ Details: [Requests and auto-approval](setup.md#requests-and-auto-approval).
 
 ### Audit log
 
-Admins get an **Audit** tab: sign-ins, user and group changes, requests and decisions, imports and removals, with time and IP. Filter by person, kind of action, or text.
+**Settings → Audit log**: sign-ins, user and group changes, requests and decisions, imports and removals, with time and IP. Filter by person, kind of action, or text.
 
 ### Collections
 

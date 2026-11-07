@@ -155,7 +155,7 @@ RomSeek has its own sign-in, users and groups. Pick one way in (you can combine 
 | **B. LLDAP** | You run [LLDAP](https://github.com/lldap/lldap) but no SSO proxy. People use their LLDAP password. | `LLDAP_URL` |
 | **C. SSO proxy** | Authelia, Authentik or similar forward auth in front of RomSeek. People are added on their first visit. | `PROXY_AUTH=true` |
 
-All settings live in `romseek.env` (see [Configuration](configuration.md)). Users and groups are managed in the **Users** tab.
+All settings live in `romseek.env` (see [Configuration](configuration.md)). Admins manage users, groups, sign-in, auto-approval and the audit log under **Settings** (the gear icon, top right).
 
 #### First admin (options A and B)
 
@@ -191,7 +191,7 @@ LLDAP groups come with them, so someone in `admins` (or any group in
 `ADMIN_GROUPS`) is an admin. If no LLDAP admin exists yet, make a RomSeek admin
 with the setup code first.
 
-People appear in **Users** once they first sign in.
+People appear in **Settings → Users & groups** once they first sign in.
 
 **Let LLDAP manage the groups (recommended).** Make an LLDAP user called
 `romseek`, add it to the `lldap_strict_readonly` group, and add:
@@ -200,6 +200,10 @@ People appear in **Users** once they first sign in.
 LLDAP_SYNC_USER=romseek
 LLDAP_SYNC_PASSWORD=...
 ```
+
+Until LLDAP accepts that account, **Settings → Sign-in** shows admins the
+steps and the password to give it in LLDAP (each reveal is logged). After the
+first successful sync the password is never shown again.
 
 With the sync account set:
 
@@ -297,7 +301,7 @@ PROXY_EMAIL_HEADER=X-authentik-email
 Open `https://roms.example.com`. You should land in RomSeek signed in (option
 C) or see its sign-in page (A and B). The menu under your name, top right,
 shows your username, groups and whether you're an admin. Admins also get a
-**Users** tab.
+gear icon for **Settings**.
 
 If an SSO admin shows up without admin rights, the groups header isn't reaching
 RomSeek: check the `copy_headers` / `authResponseHeaders` line and the user's
@@ -305,7 +309,7 @@ groups in your login service.
 
 #### Groups and permissions
 
-Open **Users**. Each group card sets:
+Open **Settings → Users & groups**. Each group card sets:
 
 - **Request games:** search and grab games. Off hides the **Download games** tab.
 - **Request platforms and BIOS:** ask for new systems, BIOS downloads and
@@ -339,7 +343,8 @@ what RomM itself shows; set that up in RomM.
 #### Requests and auto-approval
 
 Every game download, BIOS download, new platform and firmware upload is a
-request. **Requests** lists them:
+request. **Requests** lists them; the profiles are under
+**Settings → Auto-approval**:
 
 - **Auto-approval profiles** decide which requests start straight away. Each
   profile says who it applies to (everyone, admins, Default or a group), what
@@ -370,7 +375,7 @@ on the rating, RomSeek skips the lookup.
 
 #### Audit log
 
-**Audit** (admins) records sign-ins and failed sign-ins, changes to users,
+**Settings → Audit log** (admins) records sign-ins and failed sign-ins, changes to users,
 groups and profiles, requests and who approved or denied them, imports,
 removals, metadata changes and BIOS uploads, with the time and IP address.
 Entries are kept for 90 days (`AUDIT_DAYS`).

@@ -53,10 +53,10 @@ Either `PROXY_AUTH=true` isn't set in `romseek.env`, or the proxy isn't passing 
 RomSeek used to rely on the proxy alone. If you run it behind Authelia or Authentik, add `PROXY_AUTH=true` to `romseek.env` and restart. Otherwise, create the admin with the code from `docker logs romseek`.
 
 **Someone can't see a game that's in the library.**
-Their groups hide that platform or rating. Check their groups under **Users**. New downloads count as Unrated until RomM matches them.
+Their groups hide that platform or rating. Check their groups under **Settings → Users & groups**. New downloads count as Unrated until RomM matches them.
 
 **Every request waits for approval, even ones a profile should approve.**
-Check the profile order under **Requests**: the first one that fits wins, so a narrower profile above a broader one is fine, but a disabled or wrong-group profile does nothing. A game for a platform that isn't set up yet also needs a profile that approves platforms. Rating rules treat games as Unrated until the LaunchBox database has finished downloading (see `docker logs romseek`).
+Check the profile order under **Settings → Auto-approval**: the first one that fits wins, so a narrower profile above a broader one is fine, but a disabled or wrong-group profile does nothing. A game for a platform that isn't set up yet also needs a profile that approves platforms. Rating rules treat games as Unrated until the LaunchBox database has finished downloading (see `docker logs romseek`).
 
 **An old game counts as Unrated.**
 Most games from before 1994 have no ESRB rating. Tick **Unrated** in the profile (or group) for retro platforms.
@@ -66,6 +66,9 @@ The LLDAP sync account is set, so LLDAP owns the groups. Make the group in LLDAP
 
 **An approved request says "couldn't start it".**
 The indexer didn't hand over the download (it may be down). The request stays in the queue: try again later, or deny it and ask them to pick another result.
+
+**Settings → Sign-in says "LLDAP refused LLDAP_SYNC_USER's password".**
+The sync account doesn't exist in LLDAP yet, or has a different password. Follow the steps shown there, then press **Sync now**.
 
 **Forgot the admin password.**
 See [Locked out?](setup.md#locked-out).

@@ -416,7 +416,20 @@ body.no-bios [data-bios],body.no-bios [data-upload],body.no-bios [data-managefw]
 body.no-dl nav [data-tab=download]{display:none}
 body.no-bios nav [data-tab=platforms]{display:none}
 body.no-req nav [data-tab=requests]{display:none}
-body:not(.is-admin) nav [data-tab=users],body:not(.is-admin) nav [data-tab=audit],body:not(.is-admin) .admin-only{display:none!important}
+body:not(.is-admin) .admin-only{display:none!important}
+.gear{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--line-strong);color:var(--muted);border-radius:var(--radius)}
+.gear:hover,.gear.on{color:var(--text);border-color:var(--accent)}
+.gear.alert{color:var(--bad);border-color:var(--bad)}
+.setpane{display:none}.setpane.on{display:block}
+.sethead h2{margin-bottom:4px}
+#setTabs{overflow-x:auto;white-space:nowrap}
+#setTabs .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--bad);margin-left:6px;vertical-align:middle}
+.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin-bottom:18px}
+.sgrid .card dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:10px 0 0;font-size:14px}
+.sgrid .card dt{color:var(--muted)}.sgrid .card dd{margin:0;word-break:break-word}
+.secret{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.secret code{font-size:14px;padding:6px 9px;user-select:all;word-break:break-all}
+.steps{margin:8px 0 0;padding-left:20px}.steps li{margin:4px 0}
 body.ldap-managed #newGroup{display:none}
 .rqt td{vertical-align:top}
 .rqt .t b{font-weight:600}
@@ -478,6 +491,7 @@ body.ldap-managed #newGroup{display:none}
 </div></div>
 <header>
   <div class="top"><h1 class="brand"><svg class="brand-logo" viewBox="0 0 100 100" width="30" height="30" aria-hidden="true"><defs><clipPath id="rs-c"><circle cx="50" cy="50" r="50"/></clipPath><clipPath id="rs-s"><polygon points="6,92 86,12 110,12 110,110 6,110"/></clipPath></defs><g clip-path="url(#rs-c)"><rect width="100" height="100" fill="#e4eef8"/><rect width="100" height="100" fill="#a9c7e4" clip-path="url(#rs-s)"/><path d="M-2 38C14 38 24 21 38 15C54 9 72 14 80 22C88 36 92 56 102 72L102 104L-2 104Z" fill="#3d7cc0"/><path d="M-2 38C14 38 24 21 38 15C54 9 72 14 80 22C88 36 92 56 102 72L102 104L-2 104Z" fill="#1c3a62" clip-path="url(#rs-s)"/><circle cx="52" cy="27" r="5.3" fill="#f4e3b6"/><circle cx="42.8" cy="36.2" r="5.3" fill="#f4e3b6"/><circle cx="61.2" cy="36.2" r="5.3" fill="#f2ae62"/><circle cx="52" cy="45.4" r="5.3" fill="#f2ae62"/><circle cx="52" cy="36.2" r="18.5" fill="#f5f8fc" fill-opacity=".14" stroke="#f5f8fc" stroke-width="4.6"/><line x1="66.2" y1="50.4" x2="83" y2="67.2" stroke="#0f2440" stroke-width="11" stroke-linecap="round"/><line x1="66.2" y1="50.4" x2="83" y2="67.2" stroke="#f5f8fc" stroke-width="7" stroke-linecap="round"/><path d="M39.6 30.2a13.4 13.4 0 0 1 7.6-6.6" fill="none" stroke="#f5f8fc" stroke-width="2.6" stroke-linecap="round" opacity=".9"/></g></svg><span class="brand-name">RomSeek</span></h1><div class="topr"><a id="rommLink" href="#" target="_blank" rel="noopener">Open RomM →</a>
+    <a id="gearBtn" class="gear admin-only" href="#settings" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></a>
     <div class="umenu"><button id="meBtn" aria-haspopup="menu" aria-expanded="false"></button>
       <div class="udrop" id="meDrop" hidden role="menu"><div class="who" id="meWho"></div>
         <button id="mePw" role="menuitem">Change password</button><button id="meOut" role="menuitem">Sign out</button></div></div></div></div>
@@ -486,8 +500,6 @@ body.ldap-managed #newGroup{display:none}
     <button data-tab="download">Download games</button>
     <button data-tab="platforms">Platforms &amp; BIOS</button>
     <button data-tab="requests">Requests<span class="count" id="reqCount" hidden></span></button>
-    <button data-tab="users">Users</button>
-    <button data-tab="audit">Audit</button>
   </nav>
 </header>
 
@@ -526,18 +538,38 @@ body.ldap-managed #newGroup{display:none}
   <h2>Waiting for approval</h2>
   <p class="help" id="reqHelp" style="margin:0 0 10px"></p>
   <div id="reqPending"><div class="msg">Loading…</div></div>
-  <div class="admin-only">
-    <div class="vbar"><h2>Auto-approval profiles</h2><button class="sm" id="newProfile">+ New profile</button></div>
-    <p class="help" style="margin:0 0 10px">Checked from the top. The first profile that fits a request approves it straight away. If none fit, the request waits above for an admin or someone in a group that can approve. Use the arrows to change the order.</p>
-    <div class="plist" id="profList"></div>
-  </div>
+  <p class="help admin-only" style="margin:10px 0 0">Which requests start straight away is set in <a href="#settings/approval">Settings → Auto-approval</a>.</p>
   <h2>History</h2>
   <div id="reqHistory"></div>
 </section>
 
-<!-- ============ AUDIT (admins) ============ -->
-<section class="tab" id="tab-audit">
-  <h2>Audit log</h2>
+
+
+<!-- ============ SETTINGS (admins) ============ -->
+<section class="tab" id="tab-settings">
+  <div class="sethead"><h2>Settings</h2></div>
+  <div class="subnav" id="setTabs">
+    <a href="#settings/users" data-s="users">Users &amp; groups</a>
+    <a href="#settings/signin" data-s="signin">Sign-in<span class="dot" id="signinDot" hidden></span></a>
+    <a href="#settings/approval" data-s="approval">Auto-approval</a>
+    <a href="#settings/audit" data-s="audit">Audit log</a>
+  </div>
+  <div class="setpane" id="set-users">
+  <div class="vbar"><h2>Groups</h2><button class="sm" id="newGroup">+ New group</button></div>
+  <p class="help" style="margin:0 0 12px" id="groupsHelp">Groups decide what people see and can request. Someone in several groups gets everything any of them allows. People in no set-up group get <b>Default</b>. Admins see and do everything. Hiding a platform or rating only hides those games in RomSeek. Whether a request needs approval is set by the <a href="#settings/approval">auto-approval profiles</a>.</p>
+  <div class="cards" id="groupCards"></div>
+  <div class="vbar"><h2>Users</h2><div class="row"><button class="sm ghost" id="syncLdap" hidden>Sync LLDAP now</button><button class="sm" id="newUser">+ New user</button></div></div>
+  <p class="help" id="usersHelp" style="margin:0 0 10px"></p>
+  <div class="utable-wrap" id="userTable"><div class="msg">Loading…</div></div>
+</div>
+  <div class="setpane" id="set-signin"><div id="signinBody"><div class="msg">Loading…</div></div></div>
+  <div class="setpane" id="set-approval">
+    <div class="vbar"><h2>Auto-approval profiles</h2><button class="sm" id="newProfile">+ New profile</button></div>
+    <p class="help" style="margin:0 0 10px">Checked from the top. The first profile that fits a request approves it straight away. If none fit, the request waits in <a href="#requests">Requests</a> for an admin or someone in a group that can approve. Use the arrows to change the order.</p>
+    <div class="plist" id="profList"></div>
+  </div>
+  <div class="setpane" id="set-audit">
+  
   <form class="afilters" id="aForm">
     <select id="aUser"><option value="">Everyone</option></select>
     <select id="aAct"><option value="">All actions</option></select>
@@ -547,16 +579,7 @@ body.ldap-managed #newGroup{display:none}
   <div class="utable-wrap" id="auditList"><div class="msg">Loading…</div></div>
   <div class="row" style="margin-top:10px"><button class="sm ghost" id="auditMore" hidden>Load older</button></div>
   <p class="help" id="auditHelp"></p>
-</section>
-
-<!-- ============ USERS (admins) ============ -->
-<section class="tab" id="tab-users">
-  <div class="vbar"><h2>Groups</h2><button class="sm" id="newGroup">+ New group</button></div>
-  <p class="help" style="margin:0 0 12px" id="groupsHelp">Groups decide what people see and can request. Someone in several groups gets everything any of them allows. People in no set-up group get <b>Default</b>. Admins see and do everything. Hiding a platform or rating only hides those games in RomSeek. Whether a request needs approval is set by the <a href="#requests">auto-approval profiles</a>.</p>
-  <div class="cards" id="groupCards"></div>
-  <div class="vbar"><h2>Users</h2><div class="row"><button class="sm ghost" id="syncLdap" hidden>Sync LLDAP now</button><button class="sm" id="newUser">+ New user</button></div></div>
-  <p class="help" id="usersHelp" style="margin:0 0 10px"></p>
-  <div class="utable-wrap" id="userTable"><div class="msg">Loading…</div></div>
+</div>
 </section>
 
 <!-- ============ LIBRARY ============ -->
@@ -799,12 +822,15 @@ function show(hash) {
   const parts = (hash || '').split('/');
   let tab = parts[0], sub = parts.slice(1).join('/');
   const pm = ME?.perms || {};
-  if (!['download','platforms','library','users','requests','audit'].includes(tab) || (['users','audit'].includes(tab) && !pm.admin)
+  if (tab === 'users' || tab === 'audit') sub = tab, tab = 'settings';     // old links
+  if (!['download','platforms','library','settings','requests'].includes(tab) || (tab === 'settings' && !pm.admin)
       || (tab === 'download' && !pm.download) || (tab === 'platforms' && !pm.bios)
       || (tab === 'requests' && !(pm.download || pm.bios || pm.approve))) tab = 'library', sub = '';
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   document.querySelectorAll('section.tab').forEach(s => s.classList.toggle('on', s.id === 'tab-' + tab));
-  const want = tab + (tab === 'library' && sub ? '/' + sub : '');
+  if (tab === 'settings' && !['users','signin','approval','audit'].includes(sub)) sub = 'users';
+  const want = tab + ((tab === 'library' || tab === 'settings') && sub ? '/' + sub : '');
+  $('#gearBtn').classList.toggle('on', tab === 'settings');
   if (location.hash.slice(1) !== want) history.replaceState(null, '', '#' + want);
   if (tab === 'library') {
     const prev = JSON.stringify(ROUTE);
@@ -814,9 +840,15 @@ function show(hash) {
     LIB.length ? renderLib() : 0; loadLibrary();
   }
   if (tab === 'download') $('#q').focus();
-  if (tab === 'users') loadUsers();
   if (tab === 'requests') loadRequests();
-  if (tab === 'audit') loadAudit();
+  if (tab === 'settings') {
+    document.querySelectorAll('#setTabs a').forEach(a => a.classList.toggle('on', a.dataset.s === sub));
+    document.querySelectorAll('.setpane').forEach(p => p.classList.toggle('on', p.id === 'set-' + sub));
+    if (sub === 'users') loadUsers();
+    if (sub === 'signin') loadSignin();
+    if (sub === 'approval') loadUsers(false).then(renderProfiles);
+    if (sub === 'audit') loadAudit();
+  }
 }
 document.querySelector('nav').onclick = e => { const b = e.target.closest('button'); if (b) show(b.dataset.tab); };
 window.onhashchange = () => show(location.hash.slice(1));
@@ -2007,7 +2039,6 @@ async function loadRequests() {
   await refreshReqCount();
   if (!RQ) { $('#reqPending').innerHTML = '<div class="msg err">Could not load requests.</div>'; return; }
   renderRequests();
-  if (ME.perms.admin) { if (!UA) await loadUsers(false); renderProfiles(); }
 }
 function reqRow(r, pending) {
   const p = P(r.platform);
@@ -2183,6 +2214,80 @@ $('#aForm').onsubmit = e => { e.preventDefault(); loadAudit(); };
 $('#aUser').onchange = $('#aAct').onchange = () => loadAudit();
 $('#auditMore').onclick = () => loadAudit(true);
 
+
+/* ---------------- settings: sign-in (SSO & LLDAP) ---------------- */
+async function loadSignin() {
+  let d;
+  try { d = await api('api/admin/signin'); } catch (e) { $('#signinBody').innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
+  $('#signinDot').hidden = !(d.lldap.managed && d.lldap.error);
+  const L = d.lldap, X = d.proxy, on = v => v ? '<span class="pill good">On</span>' : '<span class="pill">Off</span>';
+  const ldapState = !L.url ? '<span class="pill">Not set up</span>'
+    : L.managed && L.error ? `<span class="pill need">Sync failing</span>`
+    : L.managed ? '<span class="pill good">Connected</span>' : '<span class="pill good">Sign-in only</span>';
+  let setup = '';
+  if (L.secret_available) {
+    setup = `<div class="card" style="border-color:var(--warn);margin-bottom:18px">
+      <div class="h"><b>Finish LLDAP setup</b><span class="pill need">Needs you</span></div>
+      <p class="help" style="margin:6px 0">RomSeek has a read-only LLDAP account configured, but LLDAP doesn't have it yet${L.error ? ` (“${esc(L.error)}”)` : ''}. In LLDAP:</p>
+      <ol class="steps">
+        <li><b>Create user</b> with username <code>${esc(L.sync_user)}</code> (any email).</li>
+        <li>Set its password to the one below.</li>
+        <li>Add it to the group <code>lldap_strict_readonly</code> (read-only; RomSeek leaves it out of your user list).</li>
+        <li>Come back and press <b>Sync now</b>.</li>
+      </ol>
+      <div class="secret"><span class="help" style="margin:0">Password:</span><code id="ldapPw">••••••••••••••••</code>
+        <button class="sm ghost" id="ldapShow">Show</button><button class="sm ghost" id="ldapCopy">Copy</button></div>
+      <p class="help" style="margin:0">Shown to admins only until LLDAP accepts it, then hidden for good (it stays in <code>romseek.env</code>). Each reveal is recorded in the audit log.</p>
+    </div>`;
+  }
+  $('#signinBody').innerHTML = setup + `<div class="sgrid">
+    <div class="card"><div class="h"><b>SSO proxy</b>${on(X.on)}</div>
+      <p class="help" style="margin:6px 0 0">${X.on ? 'People signed in to your proxy (Authelia, Authentik) are let in and added automatically. Their groups come from the proxy.' : 'Turn on with <code>PROXY_AUTH=true</code> when RomSeek sits behind forward auth.'}</p>
+      <dl><dt>User header</dt><dd><code>${esc(X.user_header)}</code></dd><dt>Groups header</dt><dd><code>${esc(X.groups_header)}</code></dd>
+        <dt>Admin groups</dt><dd>${d.admin_groups.map(g => `<code>${esc(g)}</code>`).join(' ') || '—'}</dd></dl></div>
+    <div class="card"><div class="h"><b>LLDAP</b>${ldapState}</div>
+      <p class="help" style="margin:6px 0 0">${L.managed ? 'LLDAP owns the groups: make them and move people there.' : L.url ? 'Password sign-in only. Add a sync account to let LLDAP own the groups.' : 'Set <code>LLDAP_URL</code> to use LLDAP.'}</p>
+      <dl><dt>Address</dt><dd>${L.url ? `<code>${esc(L.url)}</code>` : '—'}</dd>
+        <dt>Password sign-in</dt><dd>${L.login ? 'On' : 'Off'}</dd>
+        <dt>Sync account</dt><dd>${L.sync_user ? `<code>${esc(L.sync_user)}</code>` : '—'}</dd>
+        <dt>Last sync</dt><dd>${L.at ? ago(L.at) + (L.error ? ` · <span class="err">${esc(L.error)}</span>` : ` · ${L.count} people`) : '—'}</dd>
+        <dt>Connected since</dt><dd>${L.connected_at ? new Date(L.connected_at * 1000).toLocaleDateString() : '—'}</dd>
+        <dt>Left out</dt><dd>${L.service_groups.map(g => `<code>${esc(g)}</code>`).join(' ')}</dd></dl>
+      ${L.managed ? '<div class="row" style="margin-top:10px"><button class="sm" id="ldapSync">Sync now</button></div>' : ''}</div>
+    <div class="card"><div class="h"><b>RomSeek accounts</b><span class="pill good">On</span></div>
+      <p class="help" style="margin:6px 0 0">Accounts with a RomSeek password, made under Users &amp; groups. Sign-ins last ${d.session_days} days.</p></div>
+    <div class="card"><div class="h"><b>Ratings database</b>${d.gamedb.games ? '<span class="pill good">Ready</span>' : '<span class="pill need">Not ready</span>'}</div>
+      <p class="help" style="margin:6px 0 0">LaunchBox games, used to check ratings when a game is requested.</p>
+      <dl><dt>Games</dt><dd>${d.gamedb.games.toLocaleString()}</dd><dt>Updated</dt><dd>${d.gamedb.at ? ago(d.gamedb.at) : d.gamedb.building ? 'downloading…' : '—'}</dd>
+        ${d.gamedb.error ? `<dt>Error</dt><dd class="err">${esc(d.gamedb.error)}</dd>` : ''}</dl></div>
+  </div>
+  <p class="help">These come from <code>romseek.env</code>; change them there and recreate the container. See the setup guide, step 7.</p>`;
+  let pw = null;
+  const reveal = async () => {
+    if (pw) return pw;
+    try { pw = (await api('api/admin/lldap/secret', {})).password; } catch (e) { toast(e.message, 'bad'); loadSignin(); return null; }
+    return pw;
+  };
+  $('#ldapShow')?.addEventListener('click', async () => {
+    if ($('#ldapShow').textContent === 'Hide') { $('#ldapPw').textContent = '••••••••••••••••'; $('#ldapShow').textContent = 'Show'; return; }
+    const v = await reveal(); if (v) { $('#ldapPw').textContent = v; $('#ldapShow').textContent = 'Hide'; }
+  });
+  $('#ldapCopy')?.addEventListener('click', async () => {
+    const v = await reveal(); if (!v) return;
+    try { await navigator.clipboard.writeText(v); toast('Password copied', 'good'); } catch { $('#ldapPw').textContent = v; $('#ldapShow').textContent = 'Hide'; toast("Couldn't copy; it's shown instead", ''); }
+  });
+  $('#ldapSync')?.addEventListener('click', async () => {
+    $('#ldapSync').disabled = true;
+    try { const r = await api('api/admin/sync', {}); r.ok ? toast(`Connected: synced ${r.count} people from LLDAP`, 'good') : toast(r.error, 'bad'); }
+    catch (e) { toast(e.message, 'bad'); }
+    loadSignin();
+  });
+}
+async function signinAlert() {
+  if (!ME?.perms.admin) return;
+  try { const d = await api('api/admin/signin'); const bad = d.lldap.managed && d.lldap.error;
+    $('#signinDot').hidden = !bad; $('#gearBtn').classList.toggle('alert', !!bad); $('#gearBtn').title = bad ? 'Settings: LLDAP needs attention' : 'Settings'; } catch {}
+}
 /* ---------------- start ---------------- */
 async function boot() {
   let st;
@@ -2193,7 +2298,7 @@ async function boot() {
   applyMe();
   await loadConfig();
   loadPlatforms().then(() => show(location.hash.slice(1)));
-  refreshActivity(); refreshReqCount();
+  refreshActivity(); refreshReqCount(); signinAlert();
   setInterval(() => { if (!ME) return; refreshActivity(); if ($('#tab-library').classList.contains('on')) loadLibrary(true); }, 10000);
   setInterval(() => { if (ME) refreshReqCount(); }, 30000);
   setInterval(() => { if (ME) loadPlatforms(); }, 30000);
