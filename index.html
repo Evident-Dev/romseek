@@ -414,7 +414,33 @@ body.locked>header,body.locked>main{display:none}
 .udrop button:hover{background:var(--panel2)}
 body.no-bios [data-bios],body.no-bios [data-upload],body.no-bios [data-managefw],body.no-bios .bios-only{display:none!important}
 body.no-dl nav [data-tab=download]{display:none}
-body:not(.is-admin) nav [data-tab=users]{display:none}
+body.no-bios nav [data-tab=platforms]{display:none}
+body.no-req nav [data-tab=requests]{display:none}
+body:not(.is-admin) nav [data-tab=users],body:not(.is-admin) nav [data-tab=audit],body:not(.is-admin) .admin-only{display:none!important}
+body.ldap-managed #newGroup{display:none}
+.rqt td{vertical-align:top}
+.rqt .t b{font-weight:600}
+.rqt .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;align-items:center}
+.rqt .acts{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.rqt img.mc{width:34px;height:46px;object-fit:cover;float:left;margin:0 10px 0 0;background:#0a0c10}
+.pill.st-pending,.pill.st-working{border-color:var(--warn);color:var(--warn)}
+.pill.st-approved{border-color:var(--ok);color:var(--ok)}
+.pill.st-denied,.pill.st-failed{border-color:var(--bad);color:var(--bad)}
+.plist{display:flex;flex-direction:column;gap:8px;margin-bottom:22px}
+.prow{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);padding:10px 12px}
+.prow.off{opacity:.55}
+.prow .ord{display:flex;flex-direction:column;gap:2px}
+.prow .ord button{padding:0 8px;line-height:1.3;font-size:12px}
+.prow .n{font-family:var(--display);color:var(--muted);font-size:12px;margin-right:6px}
+.prow .sub{color:var(--muted);font-size:13px;margin-top:3px}
+.audit td{font-size:13px;vertical-align:top}
+.audit td.when{white-space:nowrap;color:var(--muted)}
+.audit .det{color:var(--muted);font-size:12px;margin-top:2px;word-break:break-word}
+.afilters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
+.afilters input{flex:1;min-width:160px}
+#qdlg .hit .rp{margin-left:6px}
+#prdlg .colform input:not([type=checkbox]),#ndlg textarea{width:100%}
+#gLimWrap{max-width:240px}
 .gcard{cursor:pointer}.gcard:hover,.gcard:focus-visible{border-color:var(--accent)}
 .utable-wrap{overflow-x:auto}
 .utable td .pill{margin:1px 2px 1px 0}
@@ -459,7 +485,9 @@ body:not(.is-admin) nav [data-tab=users]{display:none}
     <button data-tab="library">Library<span class="count" id="actCount" hidden></span></button>
     <button data-tab="download">Download games</button>
     <button data-tab="platforms">Platforms &amp; BIOS</button>
+    <button data-tab="requests">Requests<span class="count" id="reqCount" hidden></span></button>
     <button data-tab="users">Users</button>
+    <button data-tab="audit">Audit</button>
   </nav>
 </header>
 
@@ -470,7 +498,7 @@ body:not(.is-admin) nav [data-tab=users]{display:none}
     <input type="search" id="q" placeholder="Game name, e.g. Chrono Trigger" autocomplete="off">
     <button id="go">Search</button>
   </form>
-  <p class="help">Each result shows the system it's for. Use the <b>Platform</b> filter to narrow the list, then <b>Grab</b>. If that platform isn't set up in RomM yet, you'll be asked to add it first. Progress shows in the <a href="#library">Library</a> tab.</p>
+  <p class="help">Each result shows the system it's for. Use the <b>Platform</b> filter to narrow the list, then <b>Grab</b>. Some grabs start straight away; others go to an admin for approval (see <a href="#requests">Requests</a>). A platform that isn't set up yet is added with the game. Progress shows in the <a href="#library">Library</a> tab.</p>
   <div id="res"></div>
 </section>
 
@@ -493,10 +521,38 @@ body:not(.is-admin) nav [data-tab=users]{display:none}
   </div>
 </section>
 
+<!-- ============ REQUESTS ============ -->
+<section class="tab" id="tab-requests">
+  <h2>Waiting for approval</h2>
+  <p class="help" id="reqHelp" style="margin:0 0 10px"></p>
+  <div id="reqPending"><div class="msg">Loading…</div></div>
+  <div class="admin-only">
+    <div class="vbar"><h2>Auto-approval profiles</h2><button class="sm" id="newProfile">+ New profile</button></div>
+    <p class="help" style="margin:0 0 10px">Checked from the top. The first profile that fits a request approves it straight away. If none fit, the request waits above for an admin or someone in a group that can approve. Use the arrows to change the order.</p>
+    <div class="plist" id="profList"></div>
+  </div>
+  <h2>History</h2>
+  <div id="reqHistory"></div>
+</section>
+
+<!-- ============ AUDIT (admins) ============ -->
+<section class="tab" id="tab-audit">
+  <h2>Audit log</h2>
+  <form class="afilters" id="aForm">
+    <select id="aUser"><option value="">Everyone</option></select>
+    <select id="aAct"><option value="">All actions</option></select>
+    <input type="search" id="aQ" placeholder="Search names, titles, IPs…">
+    <button>Filter</button>
+  </form>
+  <div class="utable-wrap" id="auditList"><div class="msg">Loading…</div></div>
+  <div class="row" style="margin-top:10px"><button class="sm ghost" id="auditMore" hidden>Load older</button></div>
+  <p class="help" id="auditHelp"></p>
+</section>
+
 <!-- ============ USERS (admins) ============ -->
 <section class="tab" id="tab-users">
   <div class="vbar"><h2>Groups</h2><button class="sm" id="newGroup">+ New group</button></div>
-  <p class="help" style="margin:0 0 12px">Groups decide what people see and can do. Someone in several groups gets everything any of them allows. People in no set-up group get <b>Default</b>. Admins see and do everything. Hiding a platform or rating only hides those games in RomSeek; it doesn't stop anyone downloading.</p>
+  <p class="help" style="margin:0 0 12px" id="groupsHelp">Groups decide what people see and can request. Someone in several groups gets everything any of them allows. People in no set-up group get <b>Default</b>. Admins see and do everything. Hiding a platform or rating only hides those games in RomSeek. Whether a request needs approval is set by the <a href="#requests">auto-approval profiles</a>.</p>
   <div class="cards" id="groupCards"></div>
   <div class="vbar"><h2>Users</h2><div class="row"><button class="sm ghost" id="syncLdap" hidden>Sync LLDAP now</button><button class="sm" id="newUser">+ New user</button></div></div>
   <p class="help" id="usersHelp" style="margin:0 0 10px"></p>
@@ -628,9 +684,12 @@ body:not(.is-admin) nav [data-tab=users]{display:none}
     <label id="gNameWrap">Name<input id="gName" maxlength="40" placeholder="Kids"></label>
     <p class="help" id="gSub" style="margin:0"></p>
     <fieldset><legend>Can</legend>
-      <label class="chk"><input type="checkbox" id="gDl"> Download new games</label>
-      <label class="chk"><input type="checkbox" id="gBios"> Add platforms and download/upload BIOS</label>
+      <label class="chk"><input type="checkbox" id="gDl"> Request games (shows the Download games tab)</label>
+      <label class="chk"><input type="checkbox" id="gBios"> Request platforms and BIOS (shows the Platforms &amp; BIOS tab)</label>
+      <label class="chk"><input type="checkbox" id="gAppr"> Approve requests</label>
       <label class="chk" id="gAdminWrap"><input type="checkbox" id="gAdmin"> Admin (sees and does everything, manages users)</label>
+      <label id="gLimWrap" style="margin-top:8px">Pending request limit<input id="gLim" type="number" min="0" max="1000" inputmode="numeric" placeholder="No limit"></label>
+      <p class="help" style="margin:0">How many requests each member can have waiting for approval at once. Auto-approved requests don't count.</p>
     </fieldset>
     <fieldset id="gPFs"><legend>Platforms they see</legend>
       <label class="chk"><input type="checkbox" id="gPAll"> All platforms, including ones added later</label>
@@ -651,12 +710,48 @@ body:not(.is-admin) nav [data-tab=users]{display:none}
       <label>Display name<input id="uDisp" maxlength="100"></label></div>
     <label id="uMailWrap">Email<input id="uMail" type="email" maxlength="200" placeholder="optional"></label>
     <label id="uPwWrap"><span id="uPwLbl">Password</span><input id="uPw1" type="password" autocomplete="new-password" minlength="8"></label>
-    <fieldset><legend>RomSeek groups</legend><div class="ticks" id="uGroups"></div><p class="help" id="uExt"></p></fieldset>
+    <fieldset id="uGFs"><legend>Groups</legend><div class="ticks" id="uGroups"></div><p class="help" id="uExt"></p></fieldset>
     <label class="chk"><input type="checkbox" id="uAdmin"> Admin</label>
     <label class="chk"><input type="checkbox" id="uDis"> Disabled (can't sign in)</label>
     <p class="help" id="uNote"></p>
     <div class="btns"><button type="button" class="ghost" id="uDel" style="margin-right:auto;color:var(--bad)">Delete</button>
       <button type="button" class="ghost" id="uCancel">Cancel</button><button id="uSave">Save</button></div>
+  </form>
+</dialog>
+<dialog id="qdlg" class="mdlg">
+  <div class="fwhead"><h3>Which game is this?</h3><button class="ghost sm" id="qClose">Cancel</button></div>
+  <p class="help" id="qSub"></p>
+  <form class="row" id="qForm" style="margin:10px 0"><input type="search" id="qq" placeholder="Words from the download's name"><button>Search</button></form>
+  <div class="mres" id="qRes"></div>
+  <div class="btns" style="margin-top:10px"><button class="ghost" id="qNone">It's not listed</button></div>
+  <p class="help" id="qFoot">Results only include games whose names fit this download. “It's not listed” sends it as Unrated.</p>
+</dialog>
+<dialog id="prdlg" class="mdlg">
+  <div class="fwhead"><h3 id="prTitle"></h3><button class="ghost sm" id="prClose">Close</button></div>
+  <form id="prForm" class="colform">
+    <label>Name<input id="prName" maxlength="60" required placeholder="Everyone: Teen and under"></label>
+    <label class="chk"><input type="checkbox" id="prOn"> Enabled</label>
+    <fieldset><legend>Applies to</legend><div class="ticks" id="prWho"></div></fieldset>
+    <fieldset><legend>Approves</legend>
+      <label class="chk"><input type="checkbox" id="prGames"> Games</label>
+      <label class="chk"><input type="checkbox" id="prBios"> New platforms, BIOS downloads and firmware uploads</label>
+      <p class="help" style="margin:4px 0 0">A game for a platform that isn't set up yet needs both ticked.</p></fieldset>
+    <fieldset id="prPFs"><legend>Platforms</legend>
+      <label class="chk"><input type="checkbox" id="prPAll"> Any platform</label>
+      <div class="ticks tall" id="prPlats"></div></fieldset>
+    <fieldset id="prRFs"><legend>Game ratings</legend>
+      <label class="chk"><input type="checkbox" id="prRAll"> Any rating (no game lookup needed)</label>
+      <div class="ticks" id="prRates"></div>
+      <p class="help">Ratings come from the LaunchBox games database, matched to the download's name when it's requested. Games it can't find, and packs of several games, count as Unrated.</p></fieldset>
+    <div class="btns"><button type="button" class="ghost" id="prDel" style="margin-right:auto;color:var(--bad)">Delete</button>
+      <button type="button" class="ghost" id="prCancel">Cancel</button><button id="prSave">Save</button></div>
+  </form>
+</dialog>
+<dialog id="ndlg">
+  <h3 id="nTitle"></h3>
+  <form id="nForm" class="colform" style="display:flex;flex-direction:column;gap:10px">
+    <label>Note for the requester<textarea id="nNote" rows="3" maxlength="500" placeholder="optional"></textarea></label>
+    <div class="btns"><button type="button" class="ghost" id="nCancel">Cancel</button><button id="nOk"></button></div>
   </form>
 </dialog>
 <dialog id="pdlg">
@@ -703,8 +798,10 @@ const biosNeed = p => !p.bios ? '' : p.bios_files ? `<span class="pill good">BIO
 function show(hash) {
   const parts = (hash || '').split('/');
   let tab = parts[0], sub = parts.slice(1).join('/');
-  if (!['download','platforms','library','users'].includes(tab) || (tab === 'users' && !ME?.perms.admin)
-      || (tab === 'download' && !ME?.perms.download)) tab = 'library', sub = '';
+  const pm = ME?.perms || {};
+  if (!['download','platforms','library','users','requests','audit'].includes(tab) || (['users','audit'].includes(tab) && !pm.admin)
+      || (tab === 'download' && !pm.download) || (tab === 'platforms' && !pm.bios)
+      || (tab === 'requests' && !(pm.download || pm.bios || pm.approve))) tab = 'library', sub = '';
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   document.querySelectorAll('section.tab').forEach(s => s.classList.toggle('on', s.id === 'tab-' + tab));
   const want = tab + (tab === 'library' && sub ? '/' + sub : '');
@@ -718,6 +815,8 @@ function show(hash) {
   }
   if (tab === 'download') $('#q').focus();
   if (tab === 'users') loadUsers();
+  if (tab === 'requests') loadRequests();
+  if (tab === 'audit') loadAudit();
 }
 document.querySelector('nav').onclick = e => { const b = e.target.closest('button'); if (b) show(b.dataset.tab); };
 window.onhashchange = () => show(location.hash.slice(1));
@@ -745,7 +844,11 @@ function addPlatformDialog(p, forGame) {
     const done = v => { $('#dlg').close(); resolve(v); };
     $('#dOk').onclick = async () => {
       $('#dOk').disabled = true;
-      try { await api('api/platforms', {platform: p.slug}); toast(`${p.label} added to RomM`, 'good'); done({wantBios: pickBios}); }
+      try {
+        const r = await api('api/platforms', {platform: p.slug});
+        if (r.status === 'pending') { toast(`Asked to add ${p.label}. An admin will look at it; see Requests.`, 'good'); refreshReqCount(); done(null); }
+        else { toast(`${p.label} added to RomM`, 'good'); done({wantBios: pickBios}); }
+      }
       catch (e) { toast('Could not add platform: ' + e.message, 'bad'); done(null); }
       finally { $('#dOk').disabled = false; }
     };
@@ -837,7 +940,8 @@ $('#bres').onclick = async e => {
   const b = e.target.closest('button[data-id]'); if (!b || !biosSlug) return;
   b.disabled = true; b.textContent = '…';
   try {
-    await api('api/grab', {id: b.dataset.id, platform: biosSlug, kind: 'bios'});
+    const r = await sendRequest({id: b.dataset.id, platform: biosSlug, kind: 'bios'});
+    if (r.status === 'pending') { b.textContent = 'Requested'; toast(`Sent the ${P(biosSlug).label} BIOS for approval. Follow it in Requests.`, 'good'); refreshReqCount(); return; }
     b.textContent = 'Added ✓'; toast(`Downloading ${P(biosSlug).label} BIOS. Track it in Library.`, 'good');
     refreshActivity();
   } catch (err) { b.disabled = false; b.textContent = 'Grab BIOS'; toast('Grab failed: ' + err.message, 'bad'); }
@@ -923,8 +1027,11 @@ $('#fwFile').onchange = async () => {
     xhr.send(blob);
   });
   try {
-    for (let off = 0; off < f.size; off += CHUNK) await sendChunk(off, f.slice(off, off + CHUNK));
-    t.remove(); toast(`${f.name} added to ${label} firmware`, 'good');
+    let last;
+    for (let off = 0; off < f.size; off += CHUNK) last = await sendChunk(off, f.slice(off, off + CHUNK));
+    t.remove();
+    if (last?.request) { toast(`${f.name} uploaded and waiting for approval. Follow it in Requests.`, 'good'); refreshReqCount(); return; }
+    toast(`${f.name} added to ${label} firmware`, 'good');
     if (biosSlug === slug) { $('#biosPanel').hidden = true; biosSlug = null; }
     await loadPlatforms(); if (libPlat) renderLib(); if (fwSlug === slug) openFw(slug);
   } catch (err) { t.remove(); toast('Upload failed: ' + err.message, 'bad'); }
@@ -1013,29 +1120,23 @@ $('#res').onclick = async e => {
   const tr = btn.closest('tr'), pick = tr.querySelector('select.pick'), slug = tr.dataset.plat || (pick && pick.value);
   if (!slug) { if (pick) { pick.focus(); toast('Choose a platform for this result first.', 'bad'); } return; }
   const name = tr.querySelector('td.t').textContent.trim();
-  const send = () => api('api/grab', {id: tr.dataset.id, platform: slug, kind: 'rom', learn: !tr.dataset.plat});
   btn.disabled = true; btn.textContent = '…';
+  const reset = () => { btn.disabled = false; btn.textContent = 'Grab'; };
   try {
-    let ok = null;
-    const noAdd = () => { toast(`${P(slug).label} isn't set up yet. Ask an admin to add it, then grab again.`, 'bad'); btn.disabled = false; btn.textContent = 'Grab'; };
-    if (!P(slug).exists) {
-      if (!CFG.perms?.bios) return noAdd();
-      ok = await addPlatformDialog(P(slug), true);
-      if (!ok) { btn.disabled = false; btn.textContent = 'Grab'; return; }
-    }
-    try { await send(); }
-    catch (err) {
-      if (err.status !== 409) throw err;           // page was stale: ask now
-      if (!err.data.can_add) return noAdd();
-      ok = await addPlatformDialog(err.data.platform || P(slug), true);
-      if (!ok) { btn.disabled = false; btn.textContent = 'Grab'; return; }
-      await send();
+    const r = await sendRequest({id: tr.dataset.id, platform: slug, kind: 'rom', learn: !tr.dataset.plat}, name);
+    if (!r) return reset();
+    const m = r.match ? ` Matched as ${r.match.name} (${r.match.rating}).` : '';
+    if (r.status === 'pending') {
+      btn.textContent = 'Requested';
+      toast(`Sent ${name} for approval.${m} Follow it in Requests.`, 'good'); refreshReqCount();
+      return;
     }
     btn.textContent = 'Added ✓';
-    toast(`Downloading ${name} → ${P(slug).label}. Track it in Library.`, 'good');
+    toast(`Downloading ${name} → ${P(slug).label}.${m} Track it in Library.`, 'good');
     await loadPlatforms(); refreshActivity();
-    if (ok && ok.wantBios) openBios(slug);
-  } catch (err) { btn.disabled = false; btn.textContent = 'Grab'; toast('Grab failed: ' + err.message, 'bad'); }
+    const p = P(slug);
+    if (r.new_platform && CFG.perms?.bios && p.bios && p.bios !== 'optional' && !p.bios_files) openBios(slug);
+  } catch (err) { reset(); toast('Request failed: ' + err.message, 'bad'); }
 };
 
 /* ---------------- library ---------------- */
@@ -1089,6 +1190,7 @@ async function loadConfig() {
   try { CFG = await api('api/config'); } catch { return; }
   if (CFG.admin) { refreshActivity(); gameKey = ''; if (LIB.length) renderLib(); }
   if (CFG.romm) $('#rommLink').href = CFG.romm; else $('#rommLink').hidden = true;
+  document.body.classList.toggle('ldap-managed', !!CFG.ldap_managed);
 }
 const logo = slug => `api/logo/${slug}`;
 const logoImg = (p, cls) => `<img src="${logo(p.slug)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;fallback&quot;>${esc(p.label)}</div>'">`;
@@ -1425,7 +1527,7 @@ $('#activity').addEventListener('click', async e => {
   const b = e.target.closest('[data-cancel]'); if (!b) return;
   if (!await confirmBox(`Cancel ${b.dataset.name}?`, 'The torrent and anything downloaded so far are deleted. You can grab it again later.', 'Cancel download', 'Keep downloading')) return;
   b.disabled = true;
-  try { await api('api/cancel', {hash: b.dataset.cancel}); toast('Download cancelled', 'good'); refreshActivity(); }
+  try { await api('api/cancel', {hash: b.dataset.cancel, name: b.dataset.name}); toast('Download cancelled', 'good'); refreshActivity(); }
   catch (err) { toast(err.message, 'bad'); b.disabled = false; }
 });
 
@@ -1667,6 +1769,7 @@ function applyMe() {
   const p = ME.perms;
   document.body.classList.toggle('no-bios', !p.bios);
   document.body.classList.toggle('no-dl', !p.download);
+  document.body.classList.toggle('no-req', !(p.download || p.bios || p.approve));
   document.body.classList.toggle('is-admin', !!p.admin);
   $('#meBtn').textContent = ME.name;
   const groups = [...new Set([...ME.ext_groups, ...ME.groups])];
@@ -1692,16 +1795,16 @@ $('#pForm').onsubmit = async e => {
 
 /* ---------------- users & groups (admins) ---------------- */
 let UA = null, gEditing = null, uEditing = null;
-async function loadUsers() {
+async function loadUsers(render = true) {
   try { UA = await api('api/admin/users'); } catch (e) { $('#userTable').innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
-  renderUsers();
+  if (render) renderUsers();
 }
 function groupSummary(g) {
   if (g.admin || g.env_admin) return '<span class="pill good">Admin</span>';
   if (!g.configured) return '<span class="pill">Not set up: members get Default</span>';
   const pl = g.platforms === null ? 'All platforms' : g.platforms.length ? `${g.platforms.length} platform${g.platforms.length === 1 ? '' : 's'}` : 'No platforms';
   const ra = g.ratings === null ? 'all ratings' : g.ratings.length ? g.ratings.join(', ') : 'no ratings';
-  return `${g.download ? '<span class="pill good">Download games</span>' : '<span class="pill">No downloads</span>'}${g.bios ? '<span class="pill good">Platforms &amp; BIOS</span>' : ''}
+  return `${g.download ? '<span class="pill good">Request games</span>' : '<span class="pill">No requests</span>'}${g.bios ? '<span class="pill good">Platforms &amp; BIOS</span>' : ''}${g.approve ? '<span class="pill good">Approves</span>' : ''}${g.max_pending !== null && g.max_pending !== undefined ? `<span class="pill">${g.max_pending} pending max</span>` : ''}
     </div><div class="sub">${esc(pl)} · ${esc(ra)}`;
 }
 function renderUsers() {
@@ -1712,6 +1815,7 @@ function renderUsers() {
       <div class="tags">${g.external ? '<span class="pill" title="Comes from your sign-in provider">synced</span>' : g.local ? '<span class="pill">RomSeek group</span>' : ''}${groupSummary(g)}</div>
     </div>`).join('');
   const notes = [];
+  if (a.lldap.managed) notes.push('Groups and who is in them come from LLDAP: make groups and move people there. Here you set what each group can see and do. RomSeek accounts (not in LLDAP) can be added to LLDAP groups from their user settings.');
   if (a.proxy) notes.push('People who sign in through your SSO proxy are added automatically on their first visit; their groups follow the proxy.');
   if (a.lldap.sync) notes.push(a.lldap.error ? `<span class="err">LLDAP sync failed: ${esc(a.lldap.error)}</span>` : `LLDAP sync: ${a.lldap.count} users${a.lldap.at ? ', ' + ago(a.lldap.at) : ''}.`);
   else if (a.lldap.login) notes.push('LLDAP users are added when they first sign in.');
@@ -1740,15 +1844,16 @@ const tick = (val, label, on, title) => `<label${title ? ` title="${esc(title)}"
 const ticked = sel => [...document.querySelectorAll(sel + ' input:checked')].map(i => i.value);
 function openGroup(g) {
   const isNew = !g;
-  const x = gEditing = g || {name: '', platforms: null, ratings: null, download: true, bios: false, admin: false, local: true, configured: false, members: 0};
+  const x = gEditing = g || {name: '', platforms: null, ratings: null, download: true, bios: false, approve: false, max_pending: null, admin: false, local: true, configured: false, members: 0};
   $('#gTitle').textContent = isNew ? 'New group' : gLabel(x.name);
   $('#gNameWrap').hidden = !isNew; $('#gName').value = ''; $('#gName').required = isNew;
   $('#gSub').innerHTML = x.name === 'default' ? "Applies to everyone who isn't in a set-up group."
     : isNew ? 'A RomSeek group. Add people to it from their user settings.'
-    : (x.external ? 'Synced from your sign-in provider; who is in it is managed there.' : 'A RomSeek group. Add people to it from their user settings.')
+    : (x.external ? (UA.lldap.managed ? 'An LLDAP group; who is in it is managed in LLDAP.' : 'Synced from your sign-in provider; who is in it is managed there.') : 'A RomSeek group. Add people to it from their user settings.')
       + (x.configured ? '' : ' Not set up yet: its members get Default until you save this.')
       + (x.env_admin ? ' Listed in <code>ADMIN_GROUPS</code>, so its members are always admins.' : '');
-  $('#gDl').checked = x.download; $('#gBios').checked = x.bios;
+  $('#gDl').checked = x.download; $('#gBios').checked = x.bios; $('#gAppr').checked = !!x.approve;
+  $('#gLim').value = x.max_pending ?? '';
   $('#gAdmin').checked = x.admin || x.env_admin; $('#gAdmin').disabled = !!x.env_admin;
   $('#gAdminWrap').hidden = x.name === 'default';
   const used = new Set([...(x.platforms || []), ...PLAT.filter(p => p.exists).map(p => p.slug)]);
@@ -1765,7 +1870,7 @@ function openGroup(g) {
 }
 function syncGroupForm() {
   const adm = $('#gAdmin').checked && !$('#gAdminWrap').hidden;
-  $('#gDl').disabled = $('#gBios').disabled = adm;
+  $('#gDl').disabled = $('#gBios').disabled = $('#gAppr').disabled = $('#gLim').disabled = adm;
   $('#gPFs').disabled = $('#gRFs').disabled = adm;
   $('#gPAll').disabled = $('#gRAll').disabled = adm;
   document.querySelectorAll('#gPlats input').forEach(i => i.disabled = adm || $('#gPAll').checked);
@@ -1782,7 +1887,8 @@ $('#gForm').onsubmit = async e => {
   const x = gEditing, isNew = !x.name;
   const body = {name: isNew ? $('#gName').value.trim() : x.name, create: isNew,
     platforms: $('#gPAll').checked ? null : ticked('#gPlats'), ratings: $('#gRAll').checked ? null : ticked('#gRates'),
-    download: $('#gDl').checked, bios: $('#gBios').checked, admin: $('#gAdmin').checked && !x.env_admin};
+    download: $('#gDl').checked, bios: $('#gBios').checked, approve: $('#gAppr').checked,
+    max_pending: $('#gLim').value === '' ? null : +$('#gLim').value, admin: $('#gAdmin').checked && !x.env_admin};
   $('#gSave').disabled = true;
   try { await api('api/admin/groups', body); $('#gdlg').close(); toast(`Saved ${gLabel(body.name)}`, 'good'); await loadUsers(); await refreshMe(); }
   catch (err) { toast(err.message, 'bad'); } finally { $('#gSave').disabled = false; }
@@ -1801,7 +1907,7 @@ function openUser(u) {
   uEditing = u;
   $('#uTitle').textContent = isNew ? 'New user' : u.name;
   $('#uSub').innerHTML = isNew ? "A RomSeek account with its own password, for people who don't sign in through LLDAP or SSO."
-    : local ? 'RomSeek account.' : `Signs in through ${SRC[u.source]}. Their name, email, password and ${SRC[u.source]} groups are managed there; you can add RomSeek groups on top.`;
+    : local ? 'RomSeek account.' : `Signs in through ${SRC[u.source]}. Their name, email, password and groups are managed there.`;
   $('#uName').value = u?.username || ''; $('#uName').disabled = !isNew; $('#uName').required = isNew;
   $('#uDisp').value = u?.name || ''; $('#uDisp').disabled = !local;
   $('#uMail').value = u?.email || ''; $('#uMail').disabled = !local;
@@ -1809,15 +1915,17 @@ function openUser(u) {
   $('#uPwLbl').textContent = isNew ? 'Password' : 'New password (leave blank to keep)';
   const ext = new Set(u?.ext_groups || []);
   const names = UA.groups.map(g => g.name).filter(n => n !== 'default' && !ext.has(n));
-  $('#uGroups').innerHTML = names.length ? names.map(n => tick(n, n, (u?.groups || []).includes(n))).join('') : '<span class="help">No groups yet. Make one under Groups.</span>';
-  $('#uExt').textContent = ext.size ? `From ${SRC[u.source] || 'sign-in'}: ${[...ext].join(', ')}` : '';
+  $('#uGroups').hidden = !local;
+  $('#uGroups').innerHTML = !local ? '' : names.length ? names.map(n => tick(n, n, (u?.groups || []).includes(n))).join('')
+    : `<span class="help">No groups yet.${UA.lldap.managed ? ' Groups come from LLDAP.' : ' Make one under Groups.'}</span>`;
+  $('#uExt').textContent = ext.size ? `From ${SRC[u.source] || 'sign-in'} (change them there): ${[...ext].join(', ')}` : (!local ? `In no ${SRC[u.source]} groups, so they get Default.` : '');
   $('#uAdmin').checked = !!u?.admin; $('#uDis').checked = !!u?.disabled;
   const self = u && u.username === ME.username;
   $('#uAdmin').disabled = $('#uDis').disabled = !!self;
   $('#uDel').hidden = isNew || self;
   $('#uNote').innerHTML = [u && u.is_admin && !u.admin ? 'Admin through one of their groups.' : '',
     self ? "This is you: you can't remove your own admin rights or disable yourself." : '',
-    u && !local ? "Deleting only clears RomSeek's record (and the groups you added); they're re-added the next time they sign in. Tick Disabled to keep them out." : ''].filter(Boolean).join(' ');
+    u && !local ? "Deleting only clears RomSeek's record; they're re-added the next time they sign in. Tick Disabled to keep them out." : ''].filter(Boolean).join(' ');
   $('#udlg').showModal();
   (isNew ? $('#uName') : $('#uSave')).focus();
 }
@@ -1845,6 +1953,236 @@ async function refreshMe() {
   if (before !== JSON.stringify(ME.perms)) { await loadConfig(); loadPlatforms(); loadLibrary(true); }
 }
 
+/* ---------------- requests: send, pick the game, queue ---------------- */
+// Sends a request. If a profile depends on the game's rating and it couldn't be matched
+// automatically, asks which game it is first. Resolves the server's answer, or null if cancelled.
+async function sendRequest(body, name) {
+  let r = await api('api/request', body);
+  if (r.status !== 'need_match') return r;
+  const pick = await pickMatch(body, r, name);
+  if (pick === null) return null;
+  return api('api/request', {...body, match: pick});
+}
+let qState = null;
+function pickMatch(body, d, name) {
+  return new Promise(resolve => {
+    qState = {body, resolve};
+    $('#qSub').innerHTML = `Some approval rules depend on the game's rating, so pick which game <b>${esc(d.title || name)}</b> is (${esc(P(body.platform).label)}).`;
+    $('#qq').value = '';
+    renderMatches(d.results, '');
+    $('#qdlg').showModal();
+  });
+}
+function renderMatches(list, err) {
+  $('#qRes').innerHTML = err ? `<div class="none">${esc(err)}</div>` : list.length ? list.map((r, i) => `
+    <div class="hit">${r.cover ? `<img src="${esc(r.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<div class=noimg></div>'">` : '<div class="noimg"></div>'}
+      <div><b>${esc(r.name)}${r.year ? ` <span style="color:var(--muted);font-weight:400">(${r.year})</span>` : ''}</b>
+        <div class="src"><span class="rich">LaunchBox</span><span class="rpill">Rated ${esc(r.rating)}</span></div></div>
+      <button data-pick="${r.id}">This one</button></div>`).join('')
+    : '<div class="none">No games in the database fit this download’s name. Try fewer words, or choose “It’s not listed”.</div>';
+}
+const qDone = v => { const s = qState; qState = null; $('#qdlg').close(); s?.resolve(v); };
+$('#qForm').onsubmit = async e => {
+  e.preventDefault(); if (!qState) return;
+  const b = qState.body;
+  try { const d = await api('api/request/match?' + new URLSearchParams({id: b.id, platform: b.platform, q: $('#qq').value.trim()})); renderMatches(d.results, ''); }
+  catch (err) { renderMatches([], err.message); }
+};
+$('#qRes').onclick = e => { const b = e.target.closest('[data-pick]'); if (b) qDone(b.dataset.pick); };
+$('#qNone').onclick = () => qDone('none');
+$('#qClose').onclick = () => qDone(null);
+$('#qdlg').oncancel = e => { e.preventDefault(); qDone(null); };
+
+const KIND = {rom: 'Game', bios: 'BIOS', platform: 'New platform', upload: 'Firmware upload'};
+const STATUS = {pending: 'Waiting', working: 'Working…', approved: 'Approved', denied: 'Denied', cancelled: 'Cancelled', failed: 'Failed'};
+let RQ = null;
+async function refreshReqCount() {
+  if (!ME || !(ME.perms.download || ME.perms.bios || ME.perms.approve)) return;
+  try { RQ = await api('api/requests'); } catch { return; }
+  const n = RQ.pending.filter(r => RQ.can_approve || r.user === ME.username).length;
+  $('#reqCount').hidden = !n; $('#reqCount').textContent = n;
+  if ($('#tab-requests').classList.contains('on')) renderRequests();
+}
+async function loadRequests() {
+  await refreshReqCount();
+  if (!RQ) { $('#reqPending').innerHTML = '<div class="msg err">Could not load requests.</div>'; return; }
+  renderRequests();
+  if (ME.perms.admin) { if (!UA) await loadUsers(false); renderProfiles(); }
+}
+function reqRow(r, pending) {
+  const p = P(r.platform);
+  const what = r.kind === 'rom' ? '' : `<span class="pill">${KIND[r.kind]}</span>`;
+  const rate = r.match ? `<span class="pill rpill" title="${esc(r.rating_note || '')}">${esc(r.match.name)}${r.match.year ? ' (' + r.match.year + ')' : ''} · ${esc(r.rating)}</span>`
+    : r.rating ? `<span class="pill rpill" title="${esc(r.rating_note || '')}">${esc(r.rating)}${r.rating_note ? ' · ' + esc(r.rating_note) : ''}</span>` : '';
+  const extra = [r.new_platform ? `<span class="pill soft" title="${esc(p.label)} isn't set up yet; approving adds it">new platform</span>` : '',
+    r.size ? `<span class="help" style="margin:0">${size(r.size)}${r.indexer ? ' · ' + esc(r.indexer) : ''}${r.seeders ? ' · ' + r.seeders + ' seeds' : ''}</span>` : ''].join('');
+  const who = RQ.can_approve ? `<td class="n">${esc(r.user_name)}</td>` : '';
+  const st = `<span class="pill st-${r.status}">${STATUS[r.status] || esc(r.status)}</span>`;
+  const dec = !pending && r.decided_by ? `<div class="help" style="margin:3px 0 0">${r.decided_by === 'auto' ? 'Auto: ' + esc(r.profile || '') : 'by ' + esc(r.decided_by)}${r.decided_t ? ' · ' + ago(r.decided_t) : ''}</div>` : '';
+  const note = r.note ? `<div class="help" style="margin:3px 0 0">“${esc(r.note)}”</div>` : r.error ? `<div class="help err" style="margin:3px 0 0">${esc(r.error)}</div>` : '';
+  const imp = r.imported ? `<div class="help" style="margin:3px 0 0">${r.imported === 'imported' ? 'In RomM' : 'Download blocked'}</div>` : '';
+  const acts = pending && r.status === 'pending' ? `<div class="acts">${RQ.can_approve ? `<button class="sm" data-approve="${r.id}">Approve</button><button class="sm ghost" data-deny="${r.id}">Deny</button>` : ''}${r.user === ME.username && !RQ.can_approve ? `<button class="sm ghost" data-rcancel="${r.id}">Cancel</button>` : ''}</div>` : '';
+  return `<tr><td class="t">${r.match?.cover ? `<img class="mc" src="${esc(r.match.cover)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
+      ${r.info ? `<a href="${esc(r.info)}" target="_blank" rel="noopener" style="color:inherit"><b>${esc(r.title)}</b></a>` : `<b>${esc(r.title)}</b>`}
+      <div class="meta">${what}${rate}${extra}</div></td>
+    <td class="n">${esc(p.label)}</td>${who}<td class="n">${ago(r.t)}</td>
+    <td class="a">${pending ? acts || st : st + dec + note + imp}</td></tr>`;
+}
+function renderRequests() {
+  const head = `<thead><tr><th>Request</th><th>Platform</th>${RQ.can_approve ? '<th>Who</th>' : ''}<th>When</th><th style="text-align:right"></th></tr></thead>`;
+  $('#reqHelp').textContent = RQ.can_approve ? 'Approving starts the download (and adds the platform if needed). Denying lets you leave a note for them.'
+    : 'Requests an admin needs to look at. Ones that a profile approves start straight away and show under History.';
+  $('#reqPending').innerHTML = RQ.pending.length ? `<div class="utable-wrap"><table class="rqt">${head}<tbody>${RQ.pending.map(r => reqRow(r, true)).join('')}</tbody></table></div>`
+    : '<div class="empty">Nothing waiting.</div>';
+  $('#reqHistory').innerHTML = RQ.history.length ? `<div class="utable-wrap"><table class="rqt">${head}<tbody>${RQ.history.map(r => reqRow(r, false)).join('')}</tbody></table></div>`
+    : '<div class="empty">No requests yet.</div>';
+}
+function noteBox(title, yes) {
+  return new Promise(resolve => {
+    $('#nTitle').textContent = title; $('#nOk').textContent = yes; $('#nNote').value = '';
+    const done = v => { $('#ndlg').close(); resolve(v); };
+    $('#nForm').onsubmit = e => { e.preventDefault(); done($('#nNote').value.trim()); };
+    $('#nCancel').onclick = () => done(null);
+    $('#ndlg').oncancel = e => { e.preventDefault(); done(null); };
+    $('#ndlg').showModal(); $('#nNote').focus();
+  });
+}
+$('#tab-requests').addEventListener('click', async e => {
+  const a = e.target.closest('[data-approve],[data-deny],[data-rcancel]'); if (!a) return;
+  const id = a.dataset.approve || a.dataset.deny || a.dataset.rcancel, r = RQ.pending.find(x => x.id === id);
+  try {
+    if (a.dataset.rcancel) {
+      if (!await confirmBox('Cancel this request?', r.title, 'Cancel request', 'Keep')) return;
+      await api('api/request/cancel', {id}); toast('Request cancelled', 'good');
+    } else if (a.dataset.deny) {
+      const note = await noteBox(`Deny “${r.title}”?`, 'Deny'); if (note === null) return;
+      await api('api/request/deny', {id, note}); toast('Request denied', 'good');
+    } else {
+      a.disabled = true; a.textContent = '…';
+      await api('api/request/approve', {id}); toast(`Approved: ${r.title}`, 'good'); refreshActivity(); loadPlatforms();
+    }
+  } catch (err) { toast(err.message, 'bad'); }
+  loadRequests();
+});
+
+/* ---------------- auto-approval profiles (admins) ---------------- */
+let prEditing = null;
+const whoLabel = w => w === '@everyone' ? 'Everyone' : w === '@admins' ? 'Admins' : gLabel(w);
+function renderProfiles() {
+  const ps = UA?.profiles || [];
+  $('#profList').innerHTML = !ps.length ? '<div class="empty">No profiles: every request waits for approval.</div>' : ps.map((p, i) => {
+    const cov = [p.games && 'games', p.bios && 'platforms & BIOS'].filter(Boolean).join(' and ');
+    const pl = p.platforms === null ? 'any platform' : p.platforms.length ? p.platforms.map(s => P(s).label).join(', ') : 'no platforms';
+    const ra = !p.games ? '' : p.ratings === null ? ' · any rating' : ` · rated ${p.ratings.length ? p.ratings.join(', ') : 'nothing'}`;
+    return `<div class="prow${p.enabled ? '' : ' off'}"><div class="ord">
+        <button class="ghost sm" data-up="${i}" ${i ? '' : 'disabled'} aria-label="Move up">▲</button>
+        <button class="ghost sm" data-down="${i}" ${i < ps.length - 1 ? '' : 'disabled'} aria-label="Move down">▼</button></div>
+      <div><b><span class="n">${i + 1}</span>${esc(p.name)}</b>${p.enabled ? '' : ' <span class="pill">off</span>'}
+        <div class="sub">${esc(p.who.map(whoLabel).join(', '))} · approves ${esc(cov)} · ${esc(pl)}${esc(ra)}</div></div>
+      <button class="sm ghost" data-prof="${p.id}">Edit</button></div>`;
+  }).join('');
+  const db = UA?.gamedb;
+  if (db && !db.games) $('#profList').insertAdjacentHTML('beforeend', `<p class="help">${db.building ? 'Downloading the games database for ratings…' : db.error ? 'Games database: ' + esc(db.error) : 'The games database for ratings is loading.'} Until it's ready, rating rules treat every game as Unrated.</p>`);
+}
+$('#profList').onclick = async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.prof) return openProfile(UA.profiles.find(p => p.id === b.dataset.prof));
+  const ids = UA.profiles.map(p => p.id), i = +(b.dataset.up ?? b.dataset.down), j = b.dataset.up !== undefined ? i - 1 : i + 1;
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  try { await api('api/admin/profiles/order', {order: ids}); await loadUsers(false); renderProfiles(); } catch (err) { toast(err.message, 'bad'); }
+};
+$('#newProfile').onclick = () => openProfile(null);
+function openProfile(p) {
+  const isNew = !p;
+  const x = prEditing = p || {name: '', enabled: true, who: ['@everyone'], games: true, bios: false, platforms: null, ratings: ['E', 'E10+', 'T']};
+  $('#prTitle').textContent = isNew ? 'New profile' : x.name;
+  $('#prName').value = x.name; $('#prOn').checked = x.enabled;
+  const who = ['@everyone', '@admins', 'default', ...UA.groups.map(g => g.name).filter(n => n !== 'default')];
+  $('#prWho').innerHTML = who.map(w => tick(w, whoLabel(w), x.who.includes(w), w === 'default' ? 'People in no set-up group' : '')).join('');
+  $('#prGames').checked = x.games; $('#prBios').checked = x.bios;
+  $('#prPAll').checked = x.platforms === null;
+  $('#prPlats').innerHTML = UA.platforms.map(p => tick(p.slug, p.label, x.platforms === null || x.platforms.includes(p.slug))).join('');
+  $('#prRAll').checked = x.ratings === null;
+  $('#prRates').innerHTML = UA.ratings.map(r => tick(r.id, r.id, x.ratings === null || x.ratings.includes(r.id), r.label)).join('');
+  $('#prDel').hidden = isNew;
+  syncProfileForm();
+  $('#prdlg').showModal(); $('#prName').focus();
+}
+function syncProfileForm() {
+  document.querySelectorAll('#prPlats input').forEach(i => i.disabled = $('#prPAll').checked);
+  document.querySelectorAll('#prRates input').forEach(i => i.disabled = $('#prRAll').checked);
+  $('#prRFs').disabled = !$('#prGames').checked;
+}
+$('#prForm').addEventListener('change', e => {
+  if (e.target === $('#prPAll') || e.target === $('#prRAll'))
+    document.querySelectorAll(e.target === $('#prPAll') ? '#prPlats input' : '#prRates input').forEach(i => i.checked = e.target.checked);
+  syncProfileForm();
+});
+$('#prClose').onclick = $('#prCancel').onclick = () => $('#prdlg').close();
+$('#prForm').onsubmit = async e => {
+  e.preventDefault();
+  const body = {id: prEditing.id || '', name: $('#prName').value.trim(), enabled: $('#prOn').checked, who: ticked('#prWho'),
+    games: $('#prGames').checked, bios: $('#prBios').checked,
+    platforms: $('#prPAll').checked ? null : ticked('#prPlats'), ratings: $('#prRAll').checked ? null : ticked('#prRates')};
+  $('#prSave').disabled = true;
+  try { await api('api/admin/profiles', body); $('#prdlg').close(); toast(`Saved ${body.name}`, 'good'); await loadUsers(false); renderProfiles(); }
+  catch (err) { toast(err.message, 'bad'); } finally { $('#prSave').disabled = false; }
+};
+$('#prDel').onclick = async () => {
+  const x = prEditing; $('#prdlg').close();
+  if (!await confirmBox(`Delete the profile “${x.name}”?`, 'Requests it would have approved will wait for approval instead.', 'Delete', 'Keep')) return;
+  try { await api('api/admin/profiles/delete', {id: x.id}); toast('Profile deleted', 'good'); await loadUsers(false); renderProfiles(); }
+  catch (err) { toast(err.message, 'bad'); }
+};
+
+/* ---------------- audit log (admins) ---------------- */
+const ACT = {
+  'auth.login': 'Signed in', 'auth.login_failed': 'Sign-in failed', 'auth.logout': 'Signed out', 'auth.setup': 'Created the first admin',
+  'auth.setup_failed': 'Setup code wrong', 'auth.password': 'Changed password', 'auth.password_failed': 'Password change failed',
+  'user.created': 'Created user', 'user.saved': 'Changed user', 'user.deleted': 'Deleted user', 'user.provisioned': 'User added',
+  'user.removed': 'User removed', 'user.groups_changed': 'Groups changed', 'user.sync': 'Synced LLDAP',
+  'group.created': 'Created group', 'group.saved': 'Changed group', 'group.deleted': 'Deleted group', 'group.cleared': 'Cleared group settings',
+  'profile.created': 'Created profile', 'profile.saved': 'Changed profile', 'profile.deleted': 'Deleted profile', 'profile.reordered': 'Reordered profiles',
+  'request.created': 'Requested', 'request.auto_approved': 'Requested (auto-approved)', 'request.approved': 'Approved', 'request.denied': 'Denied',
+  'request.cancelled': 'Cancelled request', 'request.failed': 'Request failed',
+  'download.imported': 'Imported into RomM', 'download.blocked': 'Download blocked', 'download.cancelled': 'Cancelled download',
+  'game.removed': 'Removed game', 'meta.apply': 'Applied metadata', 'meta.edit': 'Edited details', 'meta.unmatch': 'Unmatched metadata',
+  'collection.saved': 'Saved collection', 'collection.deleted': 'Deleted collection',
+  'firmware.uploaded': 'Uploaded firmware', 'firmware.deleted': 'Removed firmware',
+};
+const ACTCAT = {auth: 'Sign-ins', user: 'Users', group: 'Groups', profile: 'Profiles', request: 'Requests', download: 'Downloads',
+  game: 'Games', meta: 'Metadata', collection: 'Collections', firmware: 'Firmware'};
+let AUD = [], audBefore = 0;
+const fmtVal = v => v === null || v === undefined ? '—' : Array.isArray(v) ? (v.length ? v.join(', ') : 'none') : typeof v === 'object' ? JSON.stringify(v) : String(v);
+function auditDetail(d) {
+  if (!d) return '';
+  return Object.entries(d).map(([k, v]) => k === 'changes' && v && typeof v === 'object'
+    ? Object.entries(v).map(([f, ch]) => Array.isArray(ch) && ch.length === 2 ? `${f}: ${fmtVal(ch[0])} → ${fmtVal(ch[1])}` : `${f}: ${fmtVal(ch)}`).join(' · ')
+    : `${k.replace(/_/g, ' ')}: ${fmtVal(k === 'platform' ? P(v).label : v)}`).join(' · ');
+}
+async function loadAudit(more) {
+  if (!more) { AUD = []; audBefore = 0; }
+  const q = new URLSearchParams({user: $('#aUser').value, action: $('#aAct').value, q: $('#aQ').value.trim(), before: audBefore || ''});
+  let d;
+  try { d = await api('api/admin/audit?' + q); } catch (e) { $('#auditList').innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
+  AUD = AUD.concat(d.entries);
+  if (d.entries.length) audBefore = d.entries[d.entries.length - 1].t;
+  const keepU = $('#aUser').value, keepA = $('#aAct').value;
+  $('#aUser').innerHTML = '<option value="">Everyone</option>' + d.users.map(u => `<option${u === keepU ? ' selected' : ''}>${esc(u)}</option>`).join('');
+  $('#aAct').innerHTML = '<option value="">All actions</option>' + d.actions.map(a => `<option value="${esc(a)}"${a === keepA ? ' selected' : ''}>${esc(ACTCAT[a] || a)}</option>`).join('');
+  $('#auditList').innerHTML = !AUD.length ? '<div class="empty">Nothing logged that matches.</div>' :
+    `<table class="audit"><thead><tr><th>When</th><th>Who</th><th>What</th><th>IP</th></tr></thead><tbody>${AUD.map(e => `
+      <tr><td class="when" title="${new Date(e.t * 1000).toLocaleString()}">${new Date(e.t * 1000).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</td>
+        <td>${esc(e.user)}</td>
+        <td><b>${esc(ACT[e.action] || e.action)}</b>${e.target ? ' ' + esc(e.target) : ''}<div class="det">${esc(auditDetail(e.detail))}</div></td>
+        <td class="n">${esc(e.ip || '')}</td></tr>`).join('')}</tbody></table>`;
+  $('#auditMore').hidden = !d.more;
+  $('#auditHelp').textContent = 'Entries are kept for 90 days (AUDIT_DAYS).';
+}
+$('#aForm').onsubmit = e => { e.preventDefault(); loadAudit(); };
+$('#aUser').onchange = $('#aAct').onchange = () => loadAudit();
+$('#auditMore').onclick = () => loadAudit(true);
+
 /* ---------------- start ---------------- */
 async function boot() {
   let st;
@@ -1855,8 +2193,9 @@ async function boot() {
   applyMe();
   await loadConfig();
   loadPlatforms().then(() => show(location.hash.slice(1)));
-  refreshActivity();
+  refreshActivity(); refreshReqCount();
   setInterval(() => { if (!ME) return; refreshActivity(); if ($('#tab-library').classList.contains('on')) loadLibrary(true); }, 10000);
+  setInterval(() => { if (ME) refreshReqCount(); }, 30000);
   setInterval(() => { if (ME) loadPlatforms(); }, 30000);
 }
 boot();

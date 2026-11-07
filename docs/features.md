@@ -40,9 +40,23 @@ For more metadata matches:
 Admins get a **Users** tab.
 
 - **Users:** everyone who has signed in (or been synced from LLDAP), with where they sign in from, their groups and when they were last seen. Add RomSeek accounts with **+ New user**, reset their passwords, add them to groups, make them admins, or disable them.
-- **Groups:** each group decides which platforms and game ratings its members see, and whether they can download games and add platforms/BIOS. Groups from LLDAP or your SSO show up on their own; you can also make RomSeek-only groups. People in no set-up group get **Default**.
+- **Groups:** each group decides which platforms and game ratings its members see, whether they can request games and platforms/BIOS, and whether they can approve requests. Groups from LLDAP or your SSO show up on their own. With the LLDAP sync account set, LLDAP owns the groups and who is in them. People in no set-up group get **Default**.
 
 Details: [Groups and permissions](setup.md#groups-and-permissions).
+
+### Requests
+
+Everyone who can request gets a **Requests** tab: what's waiting, and the history with who approved or denied it.
+
+- **Auto-approval profiles**, in priority order, approve requests straight away, for example "Everyone: rated T or under" or "Admins: anything". The rest wait for approval.
+- Rating rules look the game up in the LaunchBox games database when it's requested, matching the download's name. If that's unclear, the person picks the game from a list limited to names that fit the download.
+- Optional per-group limit on how many requests can be waiting at once.
+
+Details: [Requests and auto-approval](setup.md#requests-and-auto-approval).
+
+### Audit log
+
+Admins get an **Audit** tab: sign-ins, user and group changes, requests and decisions, imports and removals, with time and IP. Filter by person, kind of action, or text.
 
 ### Collections
 

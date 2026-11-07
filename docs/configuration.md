@@ -36,12 +36,23 @@ See [Step 7 of the setup guide](setup.md#step-7-choose-how-people-sign-in) for h
 | `PROXY_EMAIL_HEADER` | `Remote-Email` | Header with the email address. |
 | `LLDAP_URL` | none | LLDAP's web address, like `http://lldap:17170`. Lets people sign in with their LLDAP password. |
 | `LLDAP_LOGIN` | `true` | Set `false` to use `LLDAP_URL` only for syncing. |
-| `LLDAP_SYNC_USER` | none | An LLDAP user in `lldap_strict_readonly`. Lists every LLDAP user in RomSeek ahead of their first sign-in. |
+| `LLDAP_SYNC_USER` | none | An LLDAP user in `lldap_strict_readonly`. Lists every LLDAP user ahead of their first sign-in, and makes LLDAP the owner of groups. |
 | `LLDAP_SYNC_PASSWORD` | none | That user's password. |
 | `LLDAP_SYNC_MINUTES` | `15` | How often to sync. |
+| `LLDAP_SERVICE_GROUPS` | `lldap_strict_readonly,lldap_password_manager` | Members of these LLDAP groups are service accounts and aren't added as users. |
 | `SESSION_DAYS` | `30` | How long a sign-in lasts. |
 
-Users, groups and sessions are stored in `STATE_DIR` (`users.json`, `sessions.json`). Passwords are salted PBKDF2 hashes.
+Users, groups, profiles and sessions are stored in `STATE_DIR` (`users.json`, `sessions.json`). Passwords are salted PBKDF2 hashes.
+
+## Requests and audit log
+
+| Setting | Default | What it does |
+|---|---|---|
+| `AUDIT_DAYS` | `90` | How long audit log entries are kept (`STATE_DIR/audit.log`). |
+| `LAUNCHBOX_METADATA_URL` | LaunchBox's `Metadata.zip` | Games database used to check ratings before a download. |
+| `LAUNCHBOX_REFRESH_DAYS` | `7` | How often to download it again. |
+
+Requests are stored in `STATE_DIR/requests.json`; firmware uploads waiting for approval in `STATE_DIR/uploads/`.
 
 ---
 

@@ -191,16 +191,29 @@ LLDAP groups come with them, so someone in `admins` (or any group in
 `ADMIN_GROUPS`) is an admin. If no LLDAP admin exists yet, make a RomSeek admin
 with the setup code first.
 
-People appear in **Users** once they first sign in. To list everyone ahead of
-time, make an LLDAP user in the `lldap_strict_readonly` group and add:
+People appear in **Users** once they first sign in.
+
+**Let LLDAP manage the groups (recommended).** Make an LLDAP user called
+`romseek`, add it to the `lldap_strict_readonly` group, and add:
 
 ```ini
 LLDAP_SYNC_USER=romseek
 LLDAP_SYNC_PASSWORD=...
 ```
 
-RomSeek then syncs every 15 minutes (`LLDAP_SYNC_MINUTES`), and removes people
-you delete from LLDAP.
+With the sync account set:
+
+- RomSeek lists every LLDAP user ahead of their first sign-in, syncs every 15
+  minutes (`LLDAP_SYNC_MINUTES`), and removes people you delete from LLDAP.
+- LLDAP owns the groups. Make groups and move people between them in LLDAP.
+  RomSeek shows the LLDAP groups that have people in them, and you set what
+  each one can see and do. You can't create or delete groups in RomSeek.
+- Members of `lldap_strict_readonly` and `lldap_password_manager` count as
+  service accounts (like Authelia's bind user) and are left out
+  (`LLDAP_SERVICE_GROUPS`).
+
+You can use the sync account with option C too: set `LLDAP_LOGIN=false` so
+people still sign in through your SSO.
 
 #### Option C. SSO proxy (forward auth)
 
@@ -294,8 +307,12 @@ groups in your login service.
 
 Open **Users**. Each group card sets:
 
-- **Download new games:** search and grab games. Off hides the **Download games** tab.
-- **Add platforms and download/upload BIOS:** set up new systems and manage BIOS files.
+- **Request games:** search and grab games. Off hides the **Download games** tab.
+- **Request platforms and BIOS:** ask for new systems, BIOS downloads and
+  firmware uploads. Off hides the **Platforms & BIOS** tab.
+- **Approve requests:** approve or deny other people's requests.
+- **Pending request limit:** how many requests each member can have waiting
+  for approval at once. Blank means no limit.
 - **Platforms they see:** which systems show in the Library and Platforms tabs.
 - **Game ratings they see:** E, E10+, T, M, AO, Unrated. Ratings come from
   RomM's metadata (IGDB); other boards like PEGI are matched to the nearest
@@ -308,13 +325,55 @@ How they combine:
 - People in no set-up group get **Default**. On a fresh install, Default sees
   everything and can download games but can't add platforms or BIOS.
 - Groups from LLDAP or your SSO appear automatically. Until you save settings
-  for one, its members get Default. You can also make RomSeek-only groups and
-  tick them on any user.
+  for one, its members get Default.
+- For people who sign in through LLDAP or SSO, their groups come from there
+  and can't be changed in RomSeek. RomSeek accounts can be put in any group,
+  including LLDAP ones. Without LLDAP managing groups, you can also make
+  RomSeek-only groups for RomSeek accounts.
 
 Hiding a platform or rating only hides those games in RomSeek. It doesn't stop
 anyone downloading: if a Kids account grabs an M-rated game, it downloads, and
 it disappears from their library once RomM matches it. RomSeek doesn't control
 what RomM itself shows; set that up in RomM.
+
+#### Requests and auto-approval
+
+Every game download, BIOS download, new platform and firmware upload is a
+request. **Requests** lists them:
+
+- **Auto-approval profiles** decide which requests start straight away. Each
+  profile says who it applies to (everyone, admins, Default or a group), what
+  it approves (games, platforms and BIOS, or both), which platforms, and which
+  game ratings. For example, "Kids: E and E10+ on Nintendo 64" or
+  "Admins: anything".
+- Profiles are checked from the top; the first one that fits approves the
+  request. Use the arrows to change the order. If none fit, the request waits
+  for an admin or someone in a group that can approve.
+- A game for a platform that isn't set up yet needs a profile that approves
+  both games and platforms; otherwise it waits.
+- A fresh install starts with one profile, **Admins: anything**, so everyone
+  else's requests wait for approval. When you upgrade from a version without
+  requests, there's also **Everyone: anything** so nothing changes until you
+  edit it.
+
+**How ratings are checked.** A rating rule needs to know the game before it
+downloads. RomSeek keeps a copy of the free LaunchBox games database (about
+100 MB to download, refreshed weekly) and matches the download's name to a
+game, like "Conker's Bad Fur Day (U).zip" to Conker's Bad Fur Day, rated M.
+When it can't tell, the person picks the game from a list. The list only has
+games whose names fit the download, so nobody can pick a different,
+lower-rated game. If the game isn't listed, or the download is a pack of
+several games, it counts as **Unrated**. Many games from before 1994 have no
+ESRB rating and are Unrated too, so tick Unrated for retro platforms. Approved
+matches are passed to RomM once it imports the game. When no profile depends
+on the rating, RomSeek skips the lookup.
+
+#### Audit log
+
+**Audit** (admins) records sign-ins and failed sign-ins, changes to users,
+groups and profiles, requests and who approved or denied them, imports,
+removals, metadata changes and BIOS uploads, with the time and IP address.
+Entries are kept for 90 days (`AUDIT_DAYS`).
 
 #### Locked out?
 

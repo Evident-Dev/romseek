@@ -524,20 +524,22 @@ def suggest_from_siblings(results):
                 r["suggested"] = best[0]
 
 
-def grab(rid, slug, kind="rom", learn=False):
-    if slug not in SLUGS:
-        raise ValueError("pick a platform")
-    if kind not in ("rom", "bios"):
-        raise ValueError("bad kind")
+def result(rid):
     with LOCK:
         x = RESULTS.get(rid)
     if not x:
         raise ValueError("result expired, search again")
-    if kind == "rom" and not platform_exists(slug):
-        raise PlatformMissing(slug)
-    if kind == "bios":
-        add_platform(slug)
-    fields = {"category": CATEGORY, "tags": f"romseek,{kind}:{slug}", "savepath": SAVE_PATH}
+    return x
+
+
+def grab(x, slug, kind="rom", learn=False, tags=()):
+    """Send a Prowlarr result (the stored dict) to qBittorrent. Adds the platform if needed."""
+    if slug not in SLUGS:
+        raise ValueError("pick a platform")
+    if kind not in ("rom", "bios"):
+        raise ValueError("bad kind")
+    add_platform(slug)
+    fields = {"category": CATEGORY, "tags": ",".join(["romseek", f"{kind}:{slug}", *tags]), "savepath": SAVE_PATH}
     kind_, link_ = resolve_link(x)
     if kind_ == "torrent":
         qbit("torrents/add", fields, files={"torrents": ("rom.torrent", link_)})
@@ -981,7 +983,9 @@ def import_torrent(t, slug, kind="rom"):
         parts.append(f"BIOS: {d}")
     if extras:
         notes.append(f"skipped {len(extras)} emulator/tool file(s)")
-    linked = link_roms(t, roms, slug)
+    games = set()
+    linked = link_roms(t, roms, slug, games)
+    t["_games"] = sorted(games)
     parts.insert(0, f"{linked} file(s) -> {slug}")
     return "imported", "; ".join(parts) + (f" ({'; '.join(notes)})" if notes else "")
 
@@ -1013,17 +1017,20 @@ def split_files(wanted):
     return roms, bios, extras
 
 
-def link_roms(t, roms, slug):
+def link_roms(t, roms, slug, names=None):
     """One RomM game per file for single-file formats (packs are flattened);
     multi-file games (cue/bin, gdi, ...) become one folder each. In a pack with
     per-game subfolders, each subfolder is its own game."""
+    names = set() if names is None else names
     dest_dir = os.path.join(LIBRARY, slug)
     linked = 0
     groups = {}
     for name, p in roms:
         parts = name.replace("\\", "/").split("/")
         if len(roms) == 1 or os.path.splitext(p)[1].lower() in STANDALONE_EXT:
-            linked += link(p, os.path.join(dest_dir, safe_name(os.path.basename(p))))
+            top = safe_name(os.path.basename(p))
+            linked += link(p, os.path.join(dest_dir, top))
+            names.add(top)
         else:
             groups.setdefault(tuple(parts[:-1]), []).append((parts, p))
     if not groups:
@@ -1038,6 +1045,7 @@ def link_roms(t, roms, slug):
             else:
                 game, rel = t["name"], (parts[1:] if len(parts) > 1 else parts)
             linked += link(p, os.path.join(dest_dir, safe_name(game), *[safe_name(x) for x in rel]))
+            names.add(safe_name(game))
     return linked
 
 
@@ -1080,6 +1088,8 @@ def importer_loop():
                 set_status(h, state, detail)
                 if state in ("imported", "blocked"):
                     qbit("torrents/addTags", {"hashes": h, "tags": state})
+                    req_imported(tags, t, slug, kind, state, detail)
+            apply_pending_meta()
         except Exception:
             log("importer error:", traceback.format_exc().strip().splitlines()[-1])
         time.sleep(POLL_SECONDS)
@@ -1164,7 +1174,7 @@ UPLOAD_BLOCK_EXT = {".exe", ".scr", ".com", ".pif", ".bat", ".cmd", ".msi", ".ms
                     ".psm1", ".reg", ".lnk", ".url", ".dll", ".sh", ".html", ".htm", ".apk"}
 
 
-def upload_firmware(slug, filename, length, stream, offset=0, total=None, upload_id=""):
+def upload_firmware(slug, filename, length, stream, offset=0, total=None, upload_id="", stage=None):
     """Receive an uploaded firmware file (optionally in chunks) into library/bios/<slug>/.
 
     Chunked uploads keep each request under Cloudflare's 100 MB request limit:
@@ -1186,8 +1196,13 @@ def upload_firmware(slug, filename, length, stream, offset=0, total=None, upload
     if offset < 0 or offset + length > total:
         raise ValueError("bad chunk")
     uid = re.sub(r"[^A-Za-z0-9]", "", upload_id)[:40] or f"{os.getpid()}{threading.get_ident()}"
-    add_platform(slug)
-    d = os.path.join(FIRMWARE, slug)
+    # stage: a holding folder for uploads that wait for approval (see requests)
+    if stage:
+        os.makedirs(stage, exist_ok=True)
+        d = stage
+    else:
+        add_platform(slug)
+        d = os.path.join(FIRMWARE, slug)
     dest, tmp = os.path.join(d, name), os.path.join(d, f".upload-{uid}")
     if offset == 0 and os.path.exists(tmp):
         os.remove(tmp)
@@ -1208,7 +1223,7 @@ def upload_firmware(slug, filename, length, stream, offset=0, total=None, upload
         if offset + length == total:
             os.replace(tmp, dest)
             done = True
-            log("firmware uploaded", slug, name, total)
+            log("firmware uploaded" + (" (held for approval)" if stage else ""), slug, name, total)
     except Exception:
         if os.path.exists(tmp):
             os.remove(tmp)
@@ -1654,6 +1669,12 @@ LLDAP_LOGIN = bool(LLDAP_URL) and os.environ.get("LLDAP_LOGIN", "true").strip().
 LLDAP_SYNC_USER = os.environ.get("LLDAP_SYNC_USER", "").strip()
 LLDAP_SYNC_PASSWORD = os.environ.get("LLDAP_SYNC_PASSWORD", "")
 LLDAP_SYNC_MINUTES = int(os.environ.get("LLDAP_SYNC_MINUTES", "15"))
+# With the sync account set, LLDAP owns the group list: groups are made there, and
+# RomSeek only sets what each one may see and do. Members of these LLDAP groups are
+# service accounts (e.g. Authelia's bind user), not people, and are left out.
+LLDAP_MANAGED = bool(LLDAP_URL and LLDAP_SYNC_USER)
+LLDAP_SERVICE_GROUPS = {g.strip() for g in os.environ.get(
+    "LLDAP_SERVICE_GROUPS", "lldap_strict_readonly,lldap_password_manager").split(",") if g.strip()}
 SESSION_DAYS = int(os.environ.get("SESSION_DAYS", "30"))
 COOKIE = "romseek_session"
 
@@ -1731,6 +1752,9 @@ def load_auth():
             with open(USERS_FILE) as f:
                 d = json.load(f)
             _DB["users"], _DB["groups"] = d.get("users", {}), d.get("groups", {})
+            for k in ("profiles", "ldap_groups"):
+                if k in d:
+                    _DB[k] = d[k]
         except FileNotFoundError:
             pass
         try:
@@ -1743,6 +1767,17 @@ def load_auth():
             # adding platforms/BIOS is admin-only until an admin allows it.
             _DB["groups"][DEFAULT_GROUP] = {"platforms": None, "ratings": None,
                                             "download": True, "bios": False, "admin": False}
+            _DB["profiles"] = [{"id": "admins", "name": "Admins: anything", "enabled": True, "who": [WHO_ADMINS],
+                                "games": True, "bios": True, "platforms": None, "ratings": None}]
+            save_db()
+        if "profiles" not in _DB:
+            # Upgrading from before requests existed: keep everyone's downloads instant
+            # until an admin changes the profiles.
+            _DB["profiles"] = [
+                {"id": "admins", "name": "Admins: anything", "enabled": True, "who": [WHO_ADMINS],
+                 "games": True, "bios": True, "platforms": None, "ratings": None},
+                {"id": "everyone", "name": "Everyone: anything (as before requests)", "enabled": True,
+                 "who": [WHO_ALL], "games": True, "bios": True, "platforms": None, "ratings": None}]
             save_db()
     refresh_setup_code()
 
@@ -1775,6 +1810,9 @@ def check_new_password(pw):
 
 
 def user_groups(u):
+    # SSO/LLDAP users: their provider is the source of truth. Only RomSeek accounts get RomSeek-set groups.
+    if u.get("source", "local") != "local":
+        return sorted(set(u.get("ext_groups") or []))
     return sorted(set(u.get("ext_groups") or []) | set(u.get("groups") or []))
 
 
@@ -1788,7 +1826,8 @@ def user_is_admin(u):
 
 def perms_for(u):
     if user_is_admin(u):
-        return {"admin": True, "platforms": None, "ratings": None, "download": True, "bios": True}
+        return {"admin": True, "platforms": None, "ratings": None, "download": True, "bios": True,
+                "approve": True, "max_pending": None}
     cfg = [_DB["groups"][g] for g in user_groups(u) if g in _DB["groups"] and g != DEFAULT_GROUP]
     if not cfg:
         cfg = [_DB["groups"][DEFAULT_GROUP]]
@@ -1797,8 +1836,11 @@ def perms_for(u):
         if any(g.get(k) is None for g in cfg):
             return None  # some group allows all
         return sorted(set().union(*[set(g.get(k) or []) for g in cfg]))
+    lims = [g.get("max_pending") for g in cfg]
     return {"admin": False, "platforms": union("platforms"), "ratings": union("ratings"),
-            "download": any(g.get("download") for g in cfg), "bios": any(g.get("bios") for g in cfg)}
+            "download": any(g.get("download") for g in cfg), "bios": any(g.get("bios") for g in cfg),
+            "approve": any(g.get("approve") for g in cfg),
+            "max_pending": None if any(x is None for x in lims) else max(lims)}
 
 
 def can_see_platform(p, slug):
@@ -1905,8 +1947,11 @@ def touch_external(uname, source, name, email, groups):
             u = _DB["users"][uname] = {"source": source, "created": now, "groups": [], "admin": False, "disabled": False}
             changed = True
             log("user provisioned:", uname, f"({source})")
+            audit("system", "user.provisioned", uname, source=source, groups=sorted(set(groups)))
         elif u.get("source") not in (source, "local") and source == "ldap":
             u["source"], changed = "ldap", True
+        if not changed and u.get("ext_groups") is not None and sorted(set(groups)) != u.get("ext_groups"):
+            audit("system", "user.groups_changed", uname, source=source, before=u.get("ext_groups"), after=sorted(set(groups)))
         for k, v in (("name", name or uname), ("email", email or ""), ("ext_groups", sorted(set(groups)))):
             if u.get(k) != v:
                 u[k], changed = v, True
@@ -1993,22 +2038,30 @@ def lldap_sync():
             raise ValueError("LLDAP refused LLDAP_SYNC_USER's password")
         q = "{users{id displayName email groups{displayName}}}"
         users = lldap_post("/api/graphql", {"query": q}, tok)["data"]["users"]
-        seen = set()
+        seen, real_groups = set(), set()
         for usr in users:
             uname = usr["id"].lower()
+            groups = [g["displayName"] for g in usr.get("groups") or []]
+            if uname == LLDAP_SYNC_USER.lower() or set(groups) & LLDAP_SERVICE_GROUPS:
+                continue        # service account, not a person
             seen.add(uname)
-            touch_external(uname, "ldap", usr.get("displayName"), usr.get("email"),
-                           [g["displayName"] for g in usr.get("groups") or []])
+            real_groups |= set(groups)
+            touch_external(uname, "ldap", usr.get("displayName"), usr.get("email"), groups)
+        with AUTH_LOCK:
+            if _DB.get("ldap_groups") != sorted(real_groups):
+                _DB["ldap_groups"] = sorted(real_groups)
+                save_db()
         with AUTH_LOCK:
             gone = [n for n, u in _DB["users"].items() if u.get("source") == "ldap" and n not in seen]
             for n in gone:
                 del _DB["users"][n]
                 log("user removed (gone from LLDAP):", n)
+                audit("system", "user.removed", n, reason="no longer in LLDAP (or a service account)")
             if gone:
                 save_db()
         for n in gone:
             drop_sessions(n)
-        _SYNC.update(t=time.time(), error="", count=len(users))
+        _SYNC.update(t=time.time(), error="", count=len(seen))
     except Exception as e:
         _SYNC.update(t=time.time(), error=str(e))
         log("LLDAP sync error:", repr(e))
@@ -2045,14 +2098,17 @@ def login(uname, password, ip):
     if not ok:
         failed(key); failed(ip); failed("user|" + uname)
         log("sign-in failed:", uname, "from", ip)
+        audit(uname, "auth.login_failed", uname)
         raise Denied(401, "wrong username or password")
     with AUTH_LOCK:
         u = _DB["users"][uname]
         if u.get("disabled"):
+            audit(uname, "auth.login_failed", uname, reason="account disabled")
             raise Denied(403, "this account is disabled")
         u["last_seen"] = int(time.time())
         save_db()
     log("signed in:", uname)
+    audit(uname, "auth.login", uname, via="LLDAP" if not stored else "password")
     return new_session(uname)
 
 
@@ -2063,6 +2119,7 @@ def setup_admin(body, ip):
     code = str(body.get("code") or "").strip().upper()
     if not hmac.compare_digest(code.encode(), _SETUP["code"].encode()):
         failed(ip)
+        audit("", "auth.setup_failed", "", reason="wrong setup code")
         raise Denied(403, "wrong setup code; it's in the RomSeek server log")
     uname = str(body.get("username") or "").strip().lower()
     if not USERNAME_RX.match(uname):
@@ -2079,6 +2136,7 @@ def setup_admin(body, ip):
         save_db()
     refresh_setup_code()
     log("setup done; first admin:", uname)
+    audit(uname, "auth.setup", uname)
     return new_session(uname)
 
 
@@ -2088,12 +2146,14 @@ def change_password(uname, current, new):
         if not u or not u.get("password"):
             raise ValueError("this account's password is managed by your sign-in provider")
         if not check_password(current, u["password"]):
+            audit(uname, "auth.password_failed", uname)
             raise Denied(403, "current password is wrong")
         check_new_password(new)
         u["password"] = hash_password(new)
         save_db()
     drop_sessions(uname)
     log("password changed:", uname)
+    audit(uname, "auth.password", uname)
     return new_session(uname)
 
 
@@ -2106,10 +2166,17 @@ def public_user(n, u):
 
 
 def group_names():
+    """Groups that have real people in them. With LLDAP managing groups that is LLDAP's
+    list; otherwise the groups people arrive with plus RomSeek's own groups."""
     with AUTH_LOCK:
-        names = set(_DB["groups"]) | ADMIN_GROUPS
+        names = set()
         for u in _DB["users"].values():
             names |= set(user_groups(u))
+        if LLDAP_MANAGED:
+            names |= set(_DB.get("ldap_groups") or [])
+            names -= LLDAP_SERVICE_GROUPS
+        else:
+            names |= {n for n, g in _DB["groups"].items() if g.get("local")}
     names.discard(DEFAULT_GROUP)
     return sorted(names, key=str.lower)
 
@@ -2125,17 +2192,21 @@ def admin_overview():
         groups = []
         for n in [DEFAULT_GROUP] + group_names():
             g = _DB["groups"].get(n)
-            groups.append({"name": n, "configured": g is not None, "external": n in ext,
-                           "local": bool(g and g.get("local")), "env_admin": n in ADMIN_GROUPS,
+            groups.append({"name": n, "configured": g is not None, "external": n in ext or (LLDAP_MANAGED and n != DEFAULT_GROUP),
+                           "local": bool(g and g.get("local")) and not LLDAP_MANAGED, "env_admin": n in ADMIN_GROUPS,
                            "members": members.get(n, 0) if n != DEFAULT_GROUP else
                            sum(1 for u in _DB["users"].values()
                                if not any(x in _DB["groups"] and x != DEFAULT_GROUP for x in user_groups(u))),
                            **{k: (g or {}).get(k, d) for k, d in (("platforms", []), ("ratings", []), ("download", False),
-                                                                  ("bios", False), ("admin", False))}})
+                                                                  ("bios", False), ("admin", False), ("approve", False),
+                                                                  ("max_pending", None))}})
+        profs = [dict(p) for p in profiles()]
     return {"users": users, "groups": groups, "ratings": [{"id": r, "label": RATING_HELP[r]} for r in RATINGS],
             "platforms": [{"slug": s, "label": l} for s, l, _ in PLATFORMS],
             "lldap": {"login": LLDAP_LOGIN, "sync": bool(LLDAP_URL and LLDAP_SYNC_USER), "error": _SYNC["error"],
-                      "count": _SYNC["count"], "at": int(_SYNC["t"])},
+                      "count": _SYNC["count"], "at": int(_SYNC["t"]), "managed": LLDAP_MANAGED},
+            "profiles": profs, "gamedb": {"games": len(_LB["by_id"]), "at": _LB["t"], "error": _LB["error"],
+                                          "building": _LB["building"]},
             "proxy": PROXY_AUTH, "admin_groups": sorted(ADMIN_GROUPS)}
 
 
@@ -2151,14 +2222,29 @@ def save_group(body, me):
     name = str(body.get("name") or "").strip()
     if name != DEFAULT_GROUP and not GROUPNAME_RX.match(name):
         raise ValueError("group name: up to 40 letters, numbers, spaces, . + - @ _")
+    lim = body.get("max_pending")
+    if lim in ("", None):
+        lim = None
+    else:
+        try:
+            lim = int(lim)
+        except (TypeError, ValueError):
+            raise ValueError("pending request limit: a number, or blank for no limit")
+        if not 0 <= lim <= 1000:
+            raise ValueError("pending request limit: 0 to 1000, or blank for no limit")
     with AUTH_LOCK:
         existing = _DB["groups"].get(name)
         is_new = name not in group_names() and name != DEFAULT_GROUP
+        if is_new and LLDAP_MANAGED:
+            raise ValueError("groups come from LLDAP: create the group there and add people to it")
         if body.get("create") and (existing or not is_new):
             raise ValueError("a group with that name already exists")
+        if is_new and not body.get("create"):
+            raise ValueError("no such group")
         # null = all (including platforms added later); a missing key grants nothing
         g = {"platforms": _str_list(body.get("platforms", []), SLUGS), "ratings": _str_list(body.get("ratings", []), set(RATINGS)),
              "download": bool(body.get("download")), "bios": bool(body.get("bios")),
+             "approve": bool(body.get("approve")), "max_pending": lim,
              "admin": bool(body.get("admin")) and name != DEFAULT_GROUP,
              "local": bool((existing or {}).get("local") or is_new)}
         before = user_is_admin(_DB["users"].get(me, {}))
@@ -2172,6 +2258,8 @@ def save_group(body, me):
         save_db()
     refresh_setup_code()
     log("group saved:", name)
+    audit(me, "group.created" if existing is None and is_new else "group.saved", name,
+          changes={k: [(existing or {}).get(k), v] for k, v in g.items() if (existing or {}).get(k) != v and k != "local"})
     return {"ok": True}
 
 
@@ -2184,7 +2272,7 @@ def delete_group(name, me):
             raise ValueError("that group has no settings to remove")
         before = user_is_admin(_DB["users"].get(me, {}))
         del _DB["groups"][name]
-        if g.get("local"):
+        if g.get("local") and not LLDAP_MANAGED:
             for u in _DB["users"].values():
                 if name in (u.get("groups") or []):
                     u["groups"] = [x for x in u["groups"] if x != name]
@@ -2193,6 +2281,7 @@ def delete_group(name, me):
             raise ValueError("that would remove your own admin rights")
         save_db()
     log("group removed:", name)
+    audit(me, "group.deleted" if g.get("local") and not LLDAP_MANAGED else "group.cleared", name)
     return {"ok": True}
 
 
@@ -2219,7 +2308,10 @@ def save_user(body, me):
             if not create and body.get("password"):
                 check_new_password(str(body["password"]))
                 u["password"] = hash_password(str(body["password"]))
-        u["groups"] = sorted({str(g) for g in body.get("groups") or [] if str(g) in known and str(g) != DEFAULT_GROUP})
+        if u.get("source") == "local":
+            u["groups"] = sorted({str(g) for g in body.get("groups") or [] if str(g) in known and str(g) != DEFAULT_GROUP})
+        else:
+            u["groups"] = []      # SSO/LLDAP users: groups are managed there
         u["admin"] = bool(body.get("admin"))
         u["disabled"] = bool(body.get("disabled"))
         if uname == me and (u["disabled"] or not user_is_admin(u)):
@@ -2230,6 +2322,12 @@ def save_user(body, me):
     if u["disabled"] or (not create and body.get("password")):
         drop_sessions(uname)
     log("user", "created:" if create else "saved:", uname)
+    ch = {k: [old.get(k), u.get(k)] for k in ("name", "email", "groups", "admin", "disabled") if old.get(k) != u.get(k)}
+    if create:
+        ch = {k: u.get(k) for k in ("groups", "admin") if u.get(k)}
+    if not create and body.get("password") and u.get("source") == "local":
+        ch["password"] = "reset"
+    audit(me, "user.created" if create else "user.saved", uname, changes=ch)
     return public_user(uname, u)
 
 
@@ -2244,6 +2342,679 @@ def delete_user(uname, me):
     drop_sessions(uname)
     refresh_setup_code()
     log("user deleted:", uname)
+    audit(me, "user.deleted", uname)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- audit log
+# One JSON object per line in state/audit.log: who did what, when, from where.
+AUDIT_FILE = os.path.join(STATE_DIR, "audit.log")
+AUDIT_DAYS = int(os.environ.get("AUDIT_DAYS", "90"))
+AUDIT_LOCK = threading.Lock()
+CTX = threading.local()   # per-request: client IP for audit entries
+
+
+def audit(who, action, target="", **detail):
+    e = {"t": int(time.time()), "user": who or "system", "action": action, "target": str(target or "")[:300]}
+    ip = getattr(CTX, "ip", "")
+    if ip:
+        e["ip"] = ip
+    d = {k: v for k, v in detail.items() if v not in (None, "", [], {})}
+    if d:
+        e["detail"] = d
+    with AUDIT_LOCK:
+        try:
+            fd = os.open(AUDIT_FILE, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            with os.fdopen(fd, "a", encoding="utf-8") as f:
+                f.write(json.dumps(e, ensure_ascii=False, default=str) + "\n")
+        except OSError as ex:
+            log("audit write failed:", ex)
+
+
+def _audit_lines():
+    try:
+        with open(AUDIT_FILE, encoding="utf-8") as f:
+            return f.read().splitlines()
+    except FileNotFoundError:
+        return []
+
+
+def audit_prune():
+    cutoff = time.time() - AUDIT_DAYS * 86400
+    with AUDIT_LOCK:
+        lines = _audit_lines()
+        keep = []
+        for ln in lines:
+            try:
+                if json.loads(ln)["t"] >= cutoff:
+                    keep.append(ln)
+            except (ValueError, KeyError, TypeError):
+                continue
+        if len(keep) != len(lines):
+            tmp = AUDIT_FILE + ".tmp"
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write("".join(x + "\n" for x in keep))
+            os.replace(tmp, AUDIT_FILE)
+
+
+def audit_loop():
+    while True:
+        try:
+            audit_prune()
+        except Exception as e:
+            log("audit prune error:", repr(e))
+        time.sleep(86400)
+
+
+def audit_read(user="", action="", q="", before=0, limit=200):
+    with AUDIT_LOCK:
+        lines = _audit_lines()
+    out, users, actions, q = [], set(), set(), q.strip().lower()
+    for ln in reversed(lines):
+        try:
+            e = json.loads(ln)
+        except ValueError:
+            continue
+        users.add(e.get("user", "")); actions.add(e.get("action", "").split(".")[0])
+        if len(out) > limit:
+            continue
+        if before and e.get("t", 0) >= before:
+            continue
+        if user and e.get("user") != user:
+            continue
+        if action and not (e.get("action") == action or e.get("action", "").startswith(action + ".")):
+            continue
+        if q and q not in ln.lower():
+            continue
+        out.append(e)
+    return {"entries": out[:limit], "more": len(out) > limit, "users": sorted(users), "actions": sorted(actions)}
+
+
+# ---------------------------------------------------------------- game ratings before download
+# LaunchBox's free games database (the one RomM uses) has ESRB ratings. RomSeek keeps a
+# small index of it so a request can be checked against a group's ratings before anything
+# is downloaded. Refreshed weekly.
+LB_URL = os.environ.get("LAUNCHBOX_METADATA_URL", "https://gamesdb.launchbox-app.com/Metadata.zip")
+LB_FILE = os.path.join(STATE_DIR, "launchbox.json")
+LB_DAYS = int(os.environ.get("LAUNCHBOX_REFRESH_DAYS", "7"))
+LB_PLATFORMS = {
+    "nes": ["Nintendo Entertainment System"], "snes": ["Super Nintendo Entertainment System"],
+    "n64": ["Nintendo 64"], "gb": ["Nintendo Game Boy"], "gbc": ["Nintendo Game Boy Color"],
+    "gba": ["Nintendo Game Boy Advance"], "nds": ["Nintendo DS"], "3ds": ["Nintendo 3DS"],
+    "ngc": ["Nintendo GameCube"], "wii": ["Nintendo Wii"], "wiiu": ["Nintendo Wii U"],
+    "switch": ["Nintendo Switch"], "genesis": ["Sega Genesis"], "sms": ["Sega Master System"],
+    "gamegear": ["Sega Game Gear"], "segacd": ["Sega CD", "Sega CD 32X"], "sega32": ["Sega 32X"],
+    "saturn": ["Sega Saturn"], "dc": ["Sega Dreamcast"], "psx": ["Sony Playstation"],
+    "ps2": ["Sony Playstation 2"], "psp": ["Sony PSP"], "psvita": ["Sony Playstation Vita"],
+    "ps3": ["Sony Playstation 3"], "xbox": ["Microsoft Xbox"], "atari2600": ["Atari 2600"],
+    "tg16": ["NEC TurboGrafx-16", "NEC TurboGrafx-CD"], "neogeoaes": ["SNK Neo Geo AES", "SNK Neo Geo MVS"],
+    "arcade": ["Arcade"],
+}
+_LB_ESRB = {"EC": "E", "E": "E", "E10+": "E10+", "T": "T", "M": "M", "AO": "AO"}
+_LB = {"by_plat": {}, "by_id": {}, "t": 0, "error": "", "building": False}
+
+
+def lb_rating(v):
+    return _LB_ESRB.get((v or "").split(" - ")[0].strip().upper(), "Unrated")
+
+
+def lb_build():
+    """Download LaunchBox Metadata.zip and keep only games on RomSeek's platforms."""
+    import xml.etree.ElementTree as ET
+    import zipfile
+    part = os.path.join(STATE_DIR, "launchbox.zip.part")
+    log("game database: downloading", LB_URL)
+    with urllib.request.urlopen(urllib.request.Request(LB_URL, headers={"User-Agent": "romseek"}), timeout=120) as r, open(part, "wb") as f:
+        while True:
+            b = r.read(1 << 20)
+            if not b:
+                break
+            f.write(b)
+    slug_of = {n: s for s, names in LB_PLATFORMS.items() for n in names}
+    games, alts, covers = {}, {}, {}
+    rank = {"North America": 4, "United States": 4, None: 3, "World": 2}
+    try:
+        with zipfile.ZipFile(part) as z, z.open("Metadata.xml") as xf:
+            it = ET.iterparse(xf, events=("start", "end"))
+            _, root = next(it)
+            n = 0
+            for ev, el in it:
+                if ev != "end" or el.tag not in ("Game", "GameAlternateName", "GameImage"):
+                    continue
+                if el.tag == "Game":
+                    slug = slug_of.get(el.findtext("Platform"))
+                    if slug:
+                        try:
+                            gid = int(el.findtext("DatabaseID"))
+                        except (TypeError, ValueError):
+                            gid = None
+                        if gid:
+                            y = el.findtext("ReleaseYear") or (el.findtext("ReleaseDate") or "")[:4]
+                            games[gid] = [gid, el.findtext("Name") or "", slug, lb_rating(el.findtext("ESRB")),
+                                          int(y) if y.isdigit() else None, "", []]
+                elif el.tag == "GameAlternateName":
+                    try:
+                        alts.setdefault(int(el.findtext("DatabaseID")), []).append(el.findtext("AlternateName") or "")
+                    except (TypeError, ValueError):
+                        pass
+                elif el.findtext("Type") == "Box - Front":
+                    try:
+                        gid = int(el.findtext("DatabaseID"))
+                    except (TypeError, ValueError):
+                        gid = None
+                    sc = rank.get(el.findtext("Region"), 1)
+                    if gid and sc > covers.get(gid, (0, ""))[0]:
+                        covers[gid] = (sc, el.findtext("FileName") or "")
+                el.clear()
+                n += 1
+                if n % 5000 == 0:
+                    root.clear()
+    finally:
+        try:
+            os.remove(part)
+        except OSError:
+            pass
+    for gid, g in games.items():
+        g[5] = covers.get(gid, (0, ""))[1]
+        g[6] = [a for a in alts.get(gid, []) if a and a != g[1]][:8]
+    tmp = LB_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"t": int(time.time()), "games": list(games.values())}, f, ensure_ascii=False)
+    os.replace(tmp, LB_FILE)
+    log(f"game database: {len(games)} games indexed")
+
+
+_DISC_RX = re.compile(r"\b(disc|disk|cd|dvd)\s*\d+\b|\b\d+\s*(discs|disks|cds)\b", re.I)
+
+
+def _lb_key(s):
+    return title_key(_DISC_RX.sub(" ", s))
+
+
+def _usable(k):
+    # Non-Latin alternate names reduce to e.g. "64"; a key needs a real word.
+    return any(len(w) >= 3 and not w.isdigit() for w in k.split()) or (k and not k.isdigit() and len(k.split()) > 1)
+
+
+def _title_words(title, slug):
+    """A download's name as match words, without the system's name ("... - Nintendo 64")."""
+    t = _DISC_RX.sub(" ", re.sub(r"\.[A-Za-z0-9]{2,4}$", "", title.strip()))
+    for name in sorted({*LB_PLATFORMS.get(slug, []), LABEL.get(slug, ""), slug}, key=len, reverse=True):
+        if name:
+            t = re.sub(r"(?<![a-z0-9])" + re.escape(name) + r"(?![a-z0-9])", " ", t, flags=re.I)
+    out = []
+    for w in title_key(t).split():
+        if w not in out:
+            out.append(w)
+    return out
+
+
+def lb_load():
+    try:
+        with open(LB_FILE, encoding="utf-8") as f:
+            d = json.load(f)
+    except (FileNotFoundError, ValueError):
+        return False
+    by_plat, by_id = {}, {}
+    for gid, name, slug, rating, year, cover, alts in d.get("games", []):
+        g = {"id": gid, "name": name, "platform": slug, "rating": rating, "year": year,
+             "cover": f"https://images.launchbox-app.com/{cover}" if cover else "",
+             "keys": [k for k in {_lb_key(x) for x in [name, *alts]} if _usable(k)]}
+        by_plat.setdefault(slug, []).append(g)
+        by_id[gid] = g
+    _LB.update(by_plat=by_plat, by_id=by_id, t=d.get("t", 0))
+    return True
+
+
+def lb_loop():
+    lb_load()
+    while True:
+        if time.time() - _LB["t"] > LB_DAYS * 86400:
+            _LB["building"] = True
+            try:
+                lb_build()
+                lb_load()
+                _LB["error"] = ""
+            except Exception as e:
+                _LB["error"] = str(e)
+                log("game database error:", repr(e))
+            _LB["building"] = False
+        time.sleep(6 * 3600 if not _LB["error"] else 3600)
+
+
+def _nums(ws):
+    return {w for w in ws if w.isdigit() and len(w) < 4}
+
+
+def lb_score(g, tt, compact, nums, qt=()):
+    """How well a database game fits a download's name (0 = not allowed)."""
+    best = 0
+    for k in g["keys"]:
+        kw = k.split()
+        kc = k.replace(" ", "")
+        if qt and not all(w in kw or (len(w) > 3 and w in kc) for w in qt):
+            continue
+        if _nums(kw) != nums:          # "Mario Party 5" is not "Mario Party"
+            continue
+        cov = sum(1 for w in kw if w in tt or (len(w) > 3 and w in compact)) / len(kw)
+        if cov < 0.6:
+            continue
+        back = sum(1 for w in tt if w in kw) / max(1, len(tt))
+        best = max(best, 0.7 * cov + 0.3 * back)
+    return best
+
+
+def lb_candidates(slug, title, query="", limit=12):
+    """Database games that fit the download's name. `query` narrows them but may only use
+    words from that name, so nobody can match a different (lower-rated) game."""
+    tw = _title_words(title, slug)
+    tt, compact = set(tw), "".join(tw)
+    qt = _lb_key(query).split() if query else []
+    bad = [w for w in qt if w not in tt and not (len(w) > 3 and w in compact)]
+    if bad:
+        raise ValueError(f"search with words from the download's name (not: {', '.join(bad)})")
+    nums = _nums(tw)
+    out = []
+    for g in _LB["by_plat"].get(slug, []):
+        sc = lb_score(g, tt, compact, nums, qt)
+        if sc:
+            out.append((sc, g))
+    out.sort(key=lambda x: (-x[0], len(x[1]["name"])))
+    return [g for _, g in out[:limit]]
+
+
+def lb_fits(slug, title, gid):
+    g = _LB["by_id"].get(gid)
+    if not g or g["platform"] != slug:
+        return None
+    tw = _title_words(title, slug)
+    return g if lb_score(g, set(tw), "".join(tw), _nums(tw)) else None
+
+
+def lb_auto(slug, title):
+    """A single obvious match (the download's name is the game's name), else None."""
+    k = " ".join(_title_words(title, slug))
+    exact = [g for g in _LB["by_plat"].get(slug, []) if k in g["keys"]]
+    if exact and len({g["rating"] for g in exact}) == 1:
+        return exact[0]
+    return None
+
+
+def lb_public(g):
+    return {"id": g["id"], "name": g["name"], "year": g["year"], "cover": g["cover"], "rating": g["rating"]}
+
+
+# ---------------------------------------------------------------- requests + auto-approval profiles
+# Every download (game, BIOS), new platform and firmware upload is a request. Profiles,
+# checked in priority order, approve it automatically; the first that matches wins.
+# Otherwise it waits in the approval queue for an admin or a group allowed to approve.
+REQ_FILE = os.path.join(STATE_DIR, "requests.json")
+UPLOAD_DIR = os.path.join(STATE_DIR, "uploads")
+REQ_LOCK = threading.RLock()
+_REQ = []
+_UPLOADS = {}           # upload id -> holding folder (None = straight into place)
+REQ_KEEP = 1000         # finished requests kept for history
+WHO_ALL, WHO_ADMINS = "@everyone", "@admins"
+KIND_LABEL = {"rom": "Game", "bios": "BIOS download", "platform": "New platform", "upload": "Firmware upload"}
+
+
+def load_requests():
+    with REQ_LOCK:
+        try:
+            with open(REQ_FILE) as f:
+                _REQ[:] = json.load(f)
+        except (FileNotFoundError, ValueError):
+            pass
+
+
+def save_requests():
+    with REQ_LOCK:
+        done = [r for r in _REQ if r["status"] != "pending"]
+        if len(done) > REQ_KEEP:
+            drop = {r["id"] for r in done[:len(done) - REQ_KEEP]}
+            _REQ[:] = [r for r in _REQ if r["id"] not in drop]
+        _write_private(REQ_FILE, _REQ)
+
+
+def profiles():
+    return _DB.setdefault("profiles", [])
+
+
+def profile_applies(pr, u):
+    who = set(pr.get("who") or [])
+    mine = set(user_groups(u))
+    if DEFAULT_GROUP in who and not any(g in _DB["groups"] and g != DEFAULT_GROUP for g in mine):
+        return True     # people in no set-up group
+    return WHO_ALL in who or (WHO_ADMINS in who and user_is_admin(u)) or bool(who & mine)
+
+
+def decide(u, kind, slug, rating, new_platform=False):
+    """-> ("approve", profile) | ("need_rating", None) | ("queue", None).
+    rating None = not looked up yet; asked for only when a profile depends on it."""
+    with AUTH_LOCK:
+        for pr in profiles():
+            if not pr.get("enabled", True) or not profile_applies(pr, u):
+                continue
+            if kind == "rom":
+                if not pr.get("games") or (new_platform and not pr.get("bios")):
+                    continue
+            elif not pr.get("bios"):
+                continue
+            if pr.get("platforms") is not None and slug not in pr["platforms"]:
+                continue
+            if kind == "rom" and pr.get("ratings") is not None:
+                if rating is None:
+                    return "need_rating", None
+                if rating not in pr["ratings"]:
+                    continue
+            return "approve", pr["name"]
+    return "queue", None
+
+
+def pending_count(uname):
+    with REQ_LOCK:
+        return sum(1 for r in _REQ if r["status"] == "pending" and r["user"] == uname)
+
+
+def check_limit(uname, perms):
+    lim = perms.get("max_pending")
+    if lim is not None and pending_count(uname) >= lim:
+        raise Denied(429, f"you already have {lim} request{'s' if lim != 1 else ''} waiting for approval; "
+                          "wait for an admin, or cancel one in the Requests tab")
+
+
+def _req_id():
+    return secrets.token_hex(6)
+
+
+def make_request(uname, u, perms, body):
+    """A game/BIOS download or new platform. Approved straight away when a profile
+    matches; otherwise queued. Returns {"status": approved|pending|need_match, ...}."""
+    kind = str(body.get("kind") or "rom")
+    slug = str(body.get("platform") or "")
+    if kind not in ("rom", "bios", "platform"):
+        raise ValueError("bad kind")
+    if slug not in SLUGS:
+        raise ValueError("pick a platform")
+    if kind == "rom" and not perms.get("download"):
+        raise Denied(403, "you don't have permission to request games")
+    if kind != "rom" and not perms.get("bios"):
+        raise Denied(403, "you don't have permission to request platforms or BIOS files")
+    x = None
+    if kind == "platform":
+        if platform_exists(slug):
+            return {"status": "approved", "already": True}
+        title = LABEL[slug]
+    else:
+        x = result(str(body.get("id") or ""))
+        title = x.get("title", "")
+    new_platform = kind == "rom" and not platform_exists(slug)
+    key = (x or {}).get("guid") or (x or {}).get("downloadUrl") or ""
+    with REQ_LOCK:
+        if any(r["status"] == "pending" and r["user"] == uname and r["kind"] == kind and r["platform"] == slug
+               and (kind == "platform" or r.get("key") == key) for r in _REQ):
+            raise ValueError("you've already asked for this; it's waiting for approval")
+    rating, match, note = None, None, ""
+    verdict, prof = decide(u, kind, slug, None, new_platform)
+    if verdict == "need_rating":
+        mid = body.get("match")
+        if mid == "none":
+            rating, note = "Unrated", "not in the game database (requester)"
+        elif mid:
+            try:
+                g = lb_fits(slug, title, int(mid))
+            except (TypeError, ValueError):
+                g = None
+            if not g:
+                raise ValueError("pick one of the listed matches")
+            match, rating, note = lb_public(g), g["rating"], "matched by requester"
+        elif PACK_RX.search(title):
+            rating, note = "Unrated", "a pack of several games"
+        elif not _LB["by_id"]:
+            rating, note = "Unrated", "game database not loaded yet"
+        else:
+            g = lb_auto(slug, title)
+            if g:
+                match, rating, note = lb_public(g), g["rating"], "matched automatically"
+            else:
+                return {"status": "need_match", "term": clean_term(title), "title": title, "platform": slug,
+                        "results": [lb_public(g) for g in lb_candidates(slug, title)]}
+        verdict, prof = decide(u, kind, slug, rating, new_platform)
+    if verdict != "approve":
+        check_limit(uname, perms)
+    rec = {"id": _req_id(), "t": int(time.time()), "user": uname, "kind": kind, "platform": slug, "title": title,
+           "key": key, "result": x, "size": (x or {}).get("size") or 0, "indexer": (x or {}).get("indexer", ""),
+           "seeders": (x or {}).get("seeders") or 0, "info": (x or {}).get("infoUrl") or "",
+           "new_platform": new_platform, "match": match, "rating": rating, "rating_note": note,
+           "learn": bool(body.get("learn")), "status": "pending", "profile": prof}
+    if verdict == "approve":
+        rec.update(status="approved", decided_by="auto", decided_t=rec["t"])
+        try:
+            execute(rec)
+        except Exception as e:
+            rec.update(status="failed", error=str(e))
+            _store(rec)
+            audit(uname, "request.failed", title, kind=kind, platform=slug, error=str(e))
+            raise
+        _store(rec)
+        audit(uname, "request.auto_approved", title, kind=kind, platform=slug, profile=prof, rating=rating,
+              match=(match or {}).get("name"))
+    else:
+        _store(rec)
+        audit(uname, "request.created", title, kind=kind, platform=slug, rating=rating, match=(match or {}).get("name"))
+        log("request queued:", uname, kind, slug, title)
+    return {"status": rec["status"], "id": rec["id"], "profile": prof, "rating": rating, "match": match,
+            "new_platform": new_platform}
+
+
+def _store(rec):
+    with REQ_LOCK:
+        _REQ.append(rec)
+        save_requests()
+
+
+def request_upload(uname, slug, stage, info):
+    rec = {"id": _req_id(), "t": int(time.time()), "user": uname, "kind": "upload", "platform": slug,
+           "title": info["file"], "size": info["size"], "status": "pending", "stage": stage,
+           "upload": {"file": info["file"], "size": info["size"]}}
+    _store(rec)
+    audit(uname, "request.created", info["file"], kind="upload", platform=slug)
+    return rec
+
+
+def execute(rec):
+    """Carry out an approved request."""
+    kind, slug = rec["kind"], rec["platform"]
+    if kind in ("rom", "bios"):
+        grab(rec["result"], slug, kind, learn=rec.get("learn"), tags=[f"req:{rec['id']}"])
+        if rec.get("learn") and kind == "rom":
+            remember_choice(rec["title"], slug)
+    elif kind == "platform":
+        add_platform(slug)
+    elif kind == "upload":
+        src = os.path.join(rec["stage"], rec["upload"]["file"])
+        if not os.path.isfile(src):
+            raise ValueError("the uploaded file is gone; ask them to upload it again")
+        import shutil
+        add_platform(slug)
+        shutil.move(src, os.path.join(FIRMWARE, slug, rec["upload"]["file"]))
+        _drop_stage(rec)
+
+
+def _drop_stage(rec):
+    import shutil
+    st = rec.get("stage") or ""
+    if st.startswith(UPLOAD_DIR + os.sep):
+        shutil.rmtree(st, ignore_errors=True)
+
+
+def find_request(rid):
+    with REQ_LOCK:
+        r = next((r for r in _REQ if r["id"] == rid), None)
+    if not r:
+        raise ValueError("no such request")
+    return r
+
+
+def decide_request(rid, approve, me, note=""):
+    r = find_request(rid)
+    with REQ_LOCK:
+        if r["status"] != "pending":
+            raise ValueError(f"this request was already {r['status']}")
+        r["status"] = "working"
+    note = str(note or "").strip()[:500]
+    try:
+        if approve:
+            execute(r)
+        elif r["kind"] == "upload":
+            _drop_stage(r)
+    except Exception as e:
+        # Stays in the queue so it can be retried or denied.
+        with REQ_LOCK:
+            r.update(status="pending", error=str(e))
+            save_requests()
+        audit(me, "request.failed", r["title"], kind=r["kind"], platform=r["platform"], requested_by=r["user"], error=str(e))
+        raise ValueError(f"couldn't start it: {e}. It's still in the queue; try again later or deny it.")
+    r.update(status="approved" if approve else "denied", decided_by=me, decided_t=int(time.time()), note=note, error=None)
+    with REQ_LOCK:
+        save_requests()
+    audit(me, "request." + r["status"], r["title"], kind=r["kind"], platform=r["platform"], requested_by=r["user"], note=note)
+    return public_request(r, True)
+
+
+def cancel_request(rid, me, can_approve):
+    r = find_request(rid)
+    if r["user"] != me and not can_approve:
+        raise Denied(403, "that isn't your request")
+    with REQ_LOCK:
+        if r["status"] != "pending":
+            raise ValueError(f"this request was already {r['status']}")
+        r.update(status="cancelled", decided_by=me, decided_t=int(time.time()))
+        if r["kind"] == "upload":
+            _drop_stage(r)
+        save_requests()
+    audit(me, "request.cancelled", r["title"], kind=r["kind"], platform=r["platform"], requested_by=r["user"])
+    return {"ok": True}
+
+
+def public_request(r, full):
+    with AUTH_LOCK:
+        u = _DB["users"].get(r["user"]) or {}
+    out = {k: r.get(k) for k in ("id", "t", "user", "kind", "platform", "title", "size", "indexer", "seeders", "info",
+                                 "new_platform", "match", "rating", "rating_note", "status", "decided_t", "note",
+                                 "profile", "error", "imported")}
+    out["user_name"] = u.get("name") or r["user"]
+    out["decided_by"] = r.get("decided_by") if full or r.get("decided_by") == "auto" else ("admin" if r.get("decided_by") else None)
+    return out
+
+
+def list_requests(uname, can_approve):
+    with REQ_LOCK:
+        mine = [r for r in _REQ if can_approve or r["user"] == uname]
+    pending = [public_request(r, can_approve) for r in mine if r["status"] in ("pending", "working")]
+    done = [public_request(r, can_approve) for r in reversed(mine) if r["status"] not in ("pending", "working")][:200]
+    return {"pending": pending, "history": done, "can_approve": can_approve}
+
+
+def req_imported(tags, t, slug, kind, state, detail):
+    """Importer hook: note the result on the request, queue the approved match for RomM."""
+    rid = next((x[4:] for x in tags if x.startswith("req:")), "")
+    who = ""
+    if rid:
+        with REQ_LOCK:
+            r = next((r for r in _REQ if r["id"] == rid), None)
+            if r:
+                who = r["user"]
+                r["imported"] = state
+                games = t.get("_games") or []
+                if state == "imported" and r.get("match") and kind == "rom" and len(games) == 1:
+                    r["apply"] = {"fs_name": games[0], "since": int(time.time())}
+                save_requests()
+    audit("system", "download." + state, t["name"], platform=slug, kind=kind, requested_by=who, detail=detail)
+
+
+def apply_pending_meta():
+    """Point RomM at the database match the request was approved with, once RomM has scanned the game."""
+    if not ROMM_TOKEN:
+        return
+    with REQ_LOCK:
+        todo = [r for r in _REQ if r.get("apply")]
+    if not todo:
+        return
+    idx = romm_index()
+    for r in todo:
+        a = r["apply"]
+        rom = idx["roms"].get((idx["platforms"].get(r["platform"]), a["fs_name"]))
+        if rom:
+            try:
+                meta_apply(rom["id"], {"ids": {"launchbox_id": r["match"]["id"]}})
+                audit("system", "meta.apply", a["fs_name"], platform=r["platform"], match=r["match"]["name"], request=r["id"])
+            except Exception as e:
+                log("couldn't apply approved match:", a["fs_name"], repr(e))
+        if rom or time.time() - a["since"] > 2 * 86400:
+            with REQ_LOCK:
+                r.pop("apply", None)
+                save_requests()
+
+
+def save_profile(body, me):
+    pid = str(body.get("id") or "")
+    name = str(body.get("name") or "").strip()[:60]
+    if not name:
+        raise ValueError("give the profile a name")
+    who = body.get("who")
+    if not isinstance(who, list) or not who:
+        raise ValueError("choose who the profile applies to")
+    known = set(group_names()) | {WHO_ALL, WHO_ADMINS, DEFAULT_GROUP}
+    who = sorted({str(w) for w in who if str(w) in known})
+    if not who:
+        raise ValueError("choose who the profile applies to")
+    pr = {"name": name, "enabled": bool(body.get("enabled", True)), "who": who,
+          "games": bool(body.get("games")), "bios": bool(body.get("bios")),
+          "platforms": _str_list(body.get("platforms", []), SLUGS),
+          "ratings": _str_list(body.get("ratings", []), set(RATINGS))}
+    if not (pr["games"] or pr["bios"]):
+        raise ValueError("tick games, platforms/BIOS, or both")
+    with AUTH_LOCK:
+        ps = profiles()
+        cur = next((p for p in ps if p["id"] == pid), None) if pid else None
+        if pid and not cur:
+            raise ValueError("no such profile")
+        if cur:
+            before = dict(cur)
+            cur.update(pr)
+            changes = {k: [before.get(k), v] for k, v in pr.items() if before.get(k) != v}
+        else:
+            pr["id"] = secrets.token_hex(4)
+            ps.append(pr)
+            changes = None
+        save_db()
+    audit(me, "profile.saved" if cur else "profile.created", name, changes=changes)
+    return {"ok": True}
+
+
+def delete_profile(pid, me):
+    with AUTH_LOCK:
+        ps = profiles()
+        cur = next((p for p in ps if p["id"] == pid), None)
+        if not cur:
+            raise ValueError("no such profile")
+        ps.remove(cur)
+        save_db()
+    audit(me, "profile.deleted", cur["name"])
+    return {"ok": True}
+
+
+def order_profiles(order, me):
+    with AUTH_LOCK:
+        ps = profiles()
+        if not isinstance(order, list) or sorted(map(str, order)) != sorted(p["id"] for p in ps):
+            raise ValueError("profile list changed; reload and try again")
+        pos = {pid: i for i, pid in enumerate(map(str, order))}
+        ps.sort(key=lambda p: pos[p["id"]])
+        save_db()
+    audit(me, "profile.reordered", "", order=[p["name"] for p in ps])
     return {"ok": True}
 
 
@@ -2281,6 +3052,7 @@ class H(BaseHTTPRequestHandler):
 
     def auth(self, path):
         """Sets self.who/self.u/self.p; raises Denied when the route needs a user."""
+        CTX.ip = self.ip()
         self.who, self.u = resolve_user(self.headers)
         self.p = perms_for(self.u) if self.u else None
         if self.u and self.u.get("disabled"):
@@ -2292,8 +3064,9 @@ class H(BaseHTTPRequestHandler):
 
     def need(self, what):
         if not self.p or not self.p.get(what):
-            raise Denied(403, {"admin": "admins only", "download": "you don't have permission to download games",
-                               "bios": "you don't have permission to add platforms or BIOS files"}[what])
+            raise Denied(403, {"admin": "admins only", "download": "you don't have permission to request games",
+                               "bios": "you don't have permission to request platforms or BIOS files",
+                               "approve": "only admins and approvers can do that"}[what])
 
     def need_platform(self, slug):
         if slug not in SLUGS:
@@ -2303,6 +3076,9 @@ class H(BaseHTTPRequestHandler):
 
     def by(self):
         log("  by", self.who or "?")
+
+    def audit(self, action, target="", **detail):
+        audit(self.who, action, target, **detail)
 
     def me(self):
         if not self.u:
@@ -2328,6 +3104,7 @@ class H(BaseHTTPRequestHandler):
                                        "ldap_login": LLDAP_LOGIN, "proxy": PROXY_AUTH})
             if u.path == "/api/config":
                 return self.send(200, {"romm": ROMM_PUBLIC, "linked": bool(ROMM_TOKEN), "admin": self.p["admin"],
+                                       "ldap_managed": LLDAP_MANAGED,
                                        "perms": self.p, "user": self.me(), "romm_error": romm_index()["error"]})
             if u.path == "/api/search":
                 bios = g("kind") == "bios"
@@ -2372,6 +3149,18 @@ class H(BaseHTTPRequestHandler):
             if u.path == "/api/admin/users":
                 self.need("admin")
                 return self.send(200, admin_overview())
+            if u.path == "/api/admin/audit":
+                self.need("admin")
+                return self.send(200, audit_read(g("user"), g("action"), g("q"), int(g("before", "0") or 0)))
+            if u.path == "/api/requests":
+                return self.send(200, list_requests(self.who, bool(self.p["approve"])))
+            if u.path == "/api/request/match":
+                self.need("download")
+                x = result(g("id"))
+                if g("platform") not in SLUGS:
+                    raise ValueError("pick a platform")
+                return self.send(200, {"term": g("q") or clean_term(x.get("title", "")), "title": x.get("title", ""),
+                                       "results": [lb_public(m) for m in lb_candidates(g("platform"), x.get("title", ""), g("q"))]})
             return self.send(404, {"error": "not found"})
         except Denied as e:
             return self.send(e.code, {"error": str(e)})
@@ -2397,12 +3186,29 @@ class H(BaseHTTPRequestHandler):
                 self.need("bios")
                 qs = urllib.parse.parse_qs(u.query)
                 g = lambda k, d="": (qs.get(k) or [d])[0]
-                self.need_platform(g("platform"))
+                slug = g("platform")
+                self.need_platform(slug)
                 fname = urllib.parse.unquote(self.headers.get("X-Filename") or "")
-                info = upload_firmware(g("platform"), fname, n, self.rfile,
-                                       offset=int(g("offset", "0")), total=int(g("total", str(n))),
-                                       upload_id=g("id"))
+                offset, total = int(g("offset", "0")), int(g("total", str(n)))
+                uid = re.sub(r"[^A-Za-z0-9]", "", g("id"))[:40] or secrets.token_hex(8)
+                key = f"{self.who}|{uid}"
+                if offset == 0:
+                    # Decided once per upload: straight into RomM, or held until approved.
+                    verdict, _ = decide(self.u, "upload", slug, None)
+                    if verdict != "approve":
+                        check_limit(self.who, self.p)
+                    _UPLOADS[key] = None if verdict == "approve" else os.path.join(UPLOAD_DIR, secrets.token_hex(8))
+                if key not in _UPLOADS:
+                    raise ValueError("upload out of order, please retry")
+                stage = _UPLOADS[key]
+                info = upload_firmware(slug, fname, n, self.rfile, offset=offset, total=total, upload_id=uid, stage=stage)
                 if info["done"]:
+                    _UPLOADS.pop(key, None)
+                    if stage:
+                        rec = request_upload(self.who, slug, stage, info)
+                        info["request"] = {"status": "pending", "id": rec["id"]}
+                    else:
+                        self.audit("firmware.uploaded", info["file"], platform=slug, size=info["size"])
                     self.by()
                 return self.send(200, info)
             body = json.loads(self.rfile.read(min(n, 200000)) or b"{}")
@@ -2418,6 +3224,8 @@ class H(BaseHTTPRequestHandler):
                 tok = setup_admin(body, self.ip())
                 return self.send(200, {"ok": True}, cookie=tok)
             if path == "/api/auth/logout":
+                if self.who:
+                    self.audit("auth.logout", self.who)
                 drop_sessions(tok=cookie_value(self.headers, COOKIE))
                 return self.send(200, {"ok": True}, cookie="")
             if path == "/api/auth/password":
@@ -2438,6 +3246,13 @@ class H(BaseHTTPRequestHandler):
                     r = delete_group(s("name"), self.who)
                 elif act == "sync":
                     r = lldap_sync()
+                    self.audit("user.sync", "LLDAP", ok=r.get("ok"), count=r.get("count"), error=r.get("error"))
+                elif act == "profiles":
+                    r = save_profile(body, self.who)
+                elif act == "profiles/delete":
+                    r = delete_profile(s("id"), self.who)
+                elif act == "profiles/order":
+                    r = order_profiles(body.get("order"), self.who)
                 else:
                     return self.send(404, {"error": "not found"})
                 self.by()
@@ -2460,37 +3275,43 @@ class H(BaseHTTPRequestHandler):
                 else:
                     return self.send(404, {"error": "not found"})
                 self.by()
+                self.audit({"remove": "game.removed"}.get(act, "meta." + act), s("name") or str(rid), platform=s("platform"),
+                           match=(body.get("match") or {}).get("name"), delete_torrent=body.get("delete_torrent"))
                 return self.send(200, r)
             if path in ("/api/collections", "/api/collections/delete"):
                 self.need("admin")
                 r = save_collection(body) if path == "/api/collections" else delete_collection(s("id"))
                 self.by()
+                self.audit("collection." + ("saved" if path == "/api/collections" else "deleted"), s("name") or s("id"))
                 return self.send(200, r)
             if path == "/api/cancel":
                 self.need("admin")
                 r = cancel_download(s("hash").lower())
                 self.by()
+                self.audit("download.cancelled", s("name") or s("hash"))
                 return self.send(200, r)
             if path == "/api/peek":
                 if not (self.p["download"] or self.p["bios"]):
                     self.need("download")
                 return self.send(200, peek(s("id")))
-            if path == "/api/grab":
-                kind = s("kind") or "rom"
-                self.need("bios" if kind == "bios" else "download")
-                grab(s("id"), s("platform"), kind, learn=bool(body.get("learn")))
+            if path in ("/api/request", "/api/grab"):
+                r = make_request(self.who, self.u, self.p, body)
                 self.by()
-                return self.send(200, {"ok": True})
+                return self.send(200, r)
+            if path == "/api/platforms":
+                r = make_request(self.who, self.u, self.p, {"kind": "platform", "platform": s("platform")})
+                return self.send(200, {**r, "platform": platform_info(s("platform"))})
+            if path in ("/api/request/approve", "/api/request/deny"):
+                self.need("approve")
+                return self.send(200, decide_request(s("id"), path.endswith("approve"), self.who, s("note")))
+            if path == "/api/request/cancel":
+                return self.send(200, cancel_request(s("id"), self.who, bool(self.p["approve"])))
             if path == "/api/firmware/delete":
-                self.need("bios")
+                self.need("approve")
                 self.need_platform(s("platform"))
                 info = delete_firmware(s("platform"), s("file"))
                 self.by()
-                return self.send(200, info)
-            if path == "/api/platforms":
-                self.need("bios")
-                info = add_platform(s("platform"))
-                self.by()
+                self.audit("firmware.deleted", s("file"), platform=s("platform"))
                 return self.send(200, info)
             return self.send(404, {"error": "not found"})
         except Denied as e:
@@ -2534,7 +3355,11 @@ if __name__ == "__main__":
     load_status()
     load_titles(); load_learned()
     load_auth()
+    load_requests()
+    os.makedirs(UPLOAD_DIR, mode=0o700, exist_ok=True)
     threading.Thread(target=importer_loop, daemon=True).start()
+    threading.Thread(target=audit_loop, daemon=True).start()
+    threading.Thread(target=lb_loop, daemon=True).start()
     threading.Thread(target=titles_loop, daemon=True).start()
     if LLDAP_URL and LLDAP_SYNC_USER:
         threading.Thread(target=lldap_loop, daemon=True).start()

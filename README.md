@@ -20,6 +20,7 @@ RomSeek is a game download manager for [RomM](https://github.com/rommapp/romm). 
 - Game pages with three steps: get the game, get the emulator, get the BIOS
 - Admin tools to fix metadata, edit details and remove games
 - Users and groups: sign in with RomSeek accounts, LLDAP, or your SSO proxy (Authelia, Authentik). Choose which platforms and game ratings each group sees, and who can download
+- Requests with an approval queue and auto-approval profiles (by group, platform and game rating), plus an audit log
 - Dashboard stats for [Homepage](https://gethomepage.dev)
 - One Python file with no dependencies. Runs on the stock `python:3.12-alpine` image.
 
