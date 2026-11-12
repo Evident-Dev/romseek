@@ -288,6 +288,7 @@ dialog{background:var(--panel);border-color:var(--line-strong);box-shadow:0 20px
 .mres .hit .src{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
 .mres .hit .src span{font-family:var(--display,inherit);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:2px 6px;border:1px solid var(--line-strong);color:var(--muted)}
 .mres .hit .src span.rich{color:var(--accent);border-color:var(--accent)}
+.mres .hit .src span.best{background:var(--accent);color:#0a0c10}
 .mres .hit p{margin:0;color:var(--muted);font-size:13px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .mres .hit button{white-space:nowrap}
 .mres .none{padding:18px;text-align:center;color:var(--muted);border:1px dashed var(--line)}
@@ -758,7 +759,7 @@ body.ldap-managed #newGroup{display:none}
   <form class="row" id="qForm" style="margin:10px 0"><input type="search" id="qq" placeholder="Words from the download's name"><button>Search</button></form>
   <div class="mres" id="qRes"></div>
   <div class="btns" style="margin-top:10px"><button class="ghost" id="qNone">It's not listed</button></div>
-  <p class="help" id="qFoot">Results only include games whose names fit this download. “It's not listed” sends it as Unrated.</p>
+  <p class="help" id="qFoot">Results only include games whose names fit this download. “It's not listed” still downloads it, but RomM may not find a cover or details.</p>
 </dialog>
 <dialog id="prdlg" class="mdlg">
   <div class="fwhead"><h3 id="prTitle"></h3><button class="ghost sm" id="prClose">Close</button></div>
@@ -2010,7 +2011,9 @@ let qState = null;
 function pickMatch(body, d, name) {
   return new Promise(resolve => {
     qState = {body, resolve};
-    $('#qSub').innerHTML = `Some approval rules depend on the game's rating, so pick which game <b>${esc(d.title || name)}</b> is (${esc(P(body.platform).label)}).`;
+    $('#qSub').innerHTML = d.confirm
+      ? `Confirm which game <b>${esc(d.title || name)}</b> is (${esc(P(body.platform).label)}). RomM uses this for the cover, description and details once it downloads.`
+      : `Some approval rules depend on the game's rating, so pick which game <b>${esc(d.title || name)}</b> is (${esc(P(body.platform).label)}).`;
     $('#qq').value = '';
     renderMatches(d.results, '');
     $('#qdlg').showModal();
@@ -2020,7 +2023,7 @@ function renderMatches(list, err) {
   $('#qRes').innerHTML = err ? `<div class="none">${esc(err)}</div>` : list.length ? list.map((r, i) => `
     <div class="hit">${r.cover ? `<img src="${esc(r.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<div class=noimg></div>'">` : '<div class="noimg"></div>'}
       <div><b>${esc(r.name)}${r.year ? ` <span style="color:var(--muted);font-weight:400">(${r.year})</span>` : ''}</b>
-        <div class="src"><span class="rich">LaunchBox</span><span class="rpill">Rated ${esc(r.rating)}</span></div></div>
+        <div class="src">${r.best ? '<span class="rich best">Best match</span>' : ''}<span class="rich">LaunchBox</span><span class="rpill">Rated ${esc(r.rating)}</span></div></div>
       <button data-pick="${r.id}">This one</button></div>`).join('')
     : '<div class="none">No games in the database fit this download’s name. Try fewer words, or choose “It’s not listed”.</div>';
 }

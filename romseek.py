@@ -2733,6 +2733,11 @@ def audit_read(user="", action="", q="", before=0, limit=200):
 # LaunchBox's free games database (the one RomM uses) has ESRB ratings. RomSeek keeps a
 # small index of it so a request can be checked against a group's ratings before anything
 # is downloaded. Refreshed weekly.
+# Ask which database game a download is before it starts (true by default). Off = only
+# when an auto-approval profile depends on the rating, as before.
+CONFIRM_MATCH = os.environ.get("CONFIRM_MATCH", "true").strip().lower() not in ("0", "false", "no", "off")
+# Optional Discord webhook: a notice with the cover when a new game lands in RomM.
+NOTIFY_WEBHOOK = os.environ.get("NOTIFY_WEBHOOK_URL", "").strip()
 LB_URL = os.environ.get("LAUNCHBOX_METADATA_URL", "https://gamesdb.launchbox-app.com/Metadata.zip")
 LB_FILE = os.path.join(STATE_DIR, "launchbox.json")
 LB_DAYS = int(os.environ.get("LAUNCHBOX_REFRESH_DAYS", "7"))
@@ -3055,7 +3060,9 @@ def make_request(uname, u, perms, body):
             raise ValueError("you've already asked for this; it's waiting for approval")
     rating, match, note = None, None, ""
     verdict, prof = decide(u, kind, slug, None, new_platform)
-    if verdict == "need_rating":
+    # Every game is matched to the database before it downloads (CONFIRM_MATCH), so RomM
+    # gets the right cover and details on import, not only when a profile needs the rating.
+    if kind == "rom" and (CONFIRM_MATCH or verdict == "need_rating"):
         mid = body.get("match")
         if mid == "none":
             rating, note = "Unrated", "not in the game database (requester)"
@@ -3071,13 +3078,20 @@ def make_request(uname, u, perms, body):
             rating, note = "Unrated", "a pack of several games"
         elif not _LB["by_id"]:
             rating, note = "Unrated", "game database not loaded yet"
+        elif not _LB["by_plat"].get(slug):
+            rating, note = "Unrated", "platform not in the game database"
         else:
             g = lb_auto(slug, title)
-            if g:
+            if g and not CONFIRM_MATCH:
                 match, rating, note = lb_public(g), g["rating"], "matched automatically"
             else:
+                # Ask the requester to confirm; the obvious match (if any) is listed first.
+                found = [lb_public(c) for c in lb_candidates(slug, title)]
+                if g:
+                    best = dict(lb_public(g), best=True)
+                    found = [best] + [c for c in found if c["id"] != g["id"]]
                 return {"status": "need_match", "term": clean_term(title), "title": title, "platform": slug,
-                        "results": [lb_public(g) for g in lb_candidates(slug, title)]}
+                        "results": found, "confirm": CONFIRM_MATCH}
         verdict, prof = decide(u, kind, slug, rating, new_platform)
     if verdict != "approve":
         check_limit(uname, perms)
@@ -3215,6 +3229,33 @@ def list_requests(uname, can_approve):
     return {"pending": pending, "history": done, "can_approve": can_approve}
 
 
+def notify_new_game(name, slug, user="", cover="", rom_id=None, games=1):
+    """Discord notice for a new game in RomM (NOTIFY_WEBHOOK_URL). Runs in the background."""
+    if not NOTIFY_WEBHOOK:
+        return
+    with AUTH_LOCK:
+        who = ((_DB.get("users") or {}).get(user) or {}).get("name") or user
+    embed = {"title": name[:250], "color": 0x5B9BD5,
+             "description": f"New on **{LABEL.get(slug, slug)}**" + (f" · pack of {games} games" if games > 1 else ""),
+             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    if ROMM_PUBLIC:
+        embed["url"] = f"{ROMM_PUBLIC}/rom/{rom_id}" if rom_id else ROMM_PUBLIC
+    if cover:
+        embed["image"] = {"url": cover}
+    if who:
+        embed["footer"] = {"text": f"Requested by {who}"}
+    body = json.dumps({"embeds": [embed], "allowed_mentions": {"parse": []}}).encode()
+
+    def send():
+        try:   # Discord's Cloudflare front rejects Python's default User-Agent.
+            http(NOTIFY_WEBHOOK, body, {"Content-Type": "application/json",
+                                        "User-Agent": "RomSeek (+https://github.com/Evident-Dev/romseek)"}, timeout=20).read()
+            log("notified new game:", name)
+        except Exception as e:
+            log("new-game notice failed:", name, repr(e))
+    threading.Thread(target=send, daemon=True).start()
+
+
 def req_imported(tags, t, slug, kind, state, detail):
     """Importer hook: note the result on the request, queue the approved match for RomM."""
     rid = next((x[4:] for x in tags if x.startswith("req:")), "")
@@ -3227,7 +3268,10 @@ def req_imported(tags, t, slug, kind, state, detail):
                 r["imported"] = state
                 games = t.get("_games") or []
                 if state == "imported" and r.get("match") and kind == "rom" and len(games) == 1:
+                    # The notice waits for the match to be applied (apply_pending_meta).
                     r["apply"] = {"fs_name": games[0], "since": int(time.time())}
+                elif state == "imported" and kind == "rom":
+                    notify_new_game(clean_term(r["title"]) or r["title"], slug, who, games=max(len(games), 1))
                 save_requests()
     audit("system", "download." + state, t["name"], platform=slug, kind=kind, requested_by=who, detail=detail)
 
@@ -3245,11 +3289,14 @@ def apply_pending_meta():
         a = r["apply"]
         rom = idx["roms"].get((idx["platforms"].get(r["platform"]), a["fs_name"]))
         if rom:
+            name = r["match"].get("name") or a["fs_name"]
             try:
-                meta_apply(rom["id"], {"ids": {"launchbox_id": r["match"]["id"]}})
+                res = meta_apply(rom["id"], {"ids": {"launchbox_id": r["match"]["id"]}})
+                name = res.get("name") or name
                 audit("system", "meta.apply", a["fs_name"], platform=r["platform"], match=r["match"]["name"], request=r["id"])
             except Exception as e:
                 log("couldn't apply approved match:", a["fs_name"], repr(e))
+            notify_new_game(name, r["platform"], r["user"], r["match"].get("cover") or "", rom["id"])
         if rom or time.time() - a["since"] > 2 * 86400:
             with REQ_LOCK:
                 r.pop("apply", None)
