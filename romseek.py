@@ -22,6 +22,8 @@ import html
 import json
 import os
 import re
+import shutil
+import subprocess
 import threading
 import time
 import traceback
@@ -217,7 +219,7 @@ STANDALONE_EXT = {".zip", ".7z", ".nes", ".fds", ".sfc", ".smc", ".z64", ".n64",
                   ".v64", ".gb", ".gbc", ".gba", ".nds", ".3ds", ".cia", ".md",
                   ".gen", ".bin_md", ".sms", ".gg", ".32x", ".pce", ".a26",
                   ".iso", ".chd", ".cso", ".rvz", ".wbfs", ".wua", ".nsp", ".xci",
-                  ".pbp", ".vpk"}
+                  ".pbp", ".vpk", ".gcm", ".cdi", ".wux", ".wud"}
 
 LOCK = threading.Lock()
 RESULTS = {}          # result id -> prowlarr result (server-side so the client can't inject URLs)
@@ -978,6 +980,22 @@ def import_torrent(t, slug, kind="rom"):
 
     roms, bios, extras = split_files(wanted)
     parts, notes = [], []
+    sets, roms, set_notes = archive_sets(roms)
+    notes += set_notes
+    state, detail, done, kept = unpack_torrent(h, sets, slug)
+    if state:
+        return state, detail
+    notes += detail
+    for s in kept:  # archives that stay packed (cartridge zips etc.) link as before
+        roms += list(zip(s["names"], s["volumes"]))
+    for s, files in done:   # disguised executables in unpacked content: block, like downloads
+        for rel, q in files:
+            if os.path.splitext(rel)[1].lower() in EXEC_EXT:
+                continue
+            with open(q, "rb") as fh:
+                head = fh.read(4)
+            if head[:2] == b"MZ" or head == b"\x7fELF":
+                return "blocked", f"Windows/Linux executable disguised inside {s['stem']}: {rel}"
     if bios:
         _, d = import_bios(bios, slug)
         parts.append(f"BIOS: {d}")
@@ -985,6 +1003,10 @@ def import_torrent(t, slug, kind="rom"):
         notes.append(f"skipped {len(extras)} emulator/tool file(s)")
     games = set()
     linked = link_roms(t, roms, slug, games)
+    if done:
+        linked += link_unpacked(done, slug, games, notes)
+        notes.insert(0, f"unpacked {len(done)} archive(s)")
+        shutil.rmtree(os.path.join(STAGING, h), ignore_errors=True)  # library keeps hardlinks
     t["_games"] = sorted(games)
     parts.insert(0, f"{linked} file(s) -> {slug}")
     return "imported", "; ".join(parts) + (f" ({'; '.join(notes)})" if notes else "")
@@ -1046,6 +1068,251 @@ def link_roms(t, roms, slug, names=None):
                 game, rel = t["name"], (parts[1:] if len(parts) > 1 else parts)
             linked += link(p, os.path.join(dest_dir, safe_name(game), *[safe_name(x) for x in rel]))
             names.add(safe_name(game))
+    return linked
+
+
+# ---------------------------------------------------------------- archives
+# Disc images and multi-part/RAR archives are useless to emulators while packed,
+# so they are unpacked into a staging folder under the downloads folder (on the
+# same disk, so the library gets hardlinks). Single .zip/.7z files that only
+# hold cartridge ROMs stay packed: emulators and RomM read those directly.
+# Unpacked files pass the same virus-scan gate as downloads (when SCAN_STATE is
+# set) plus an executable check before anything is linked.
+# Must be on the same filesystem as the library (hardlinks) and inside the folder
+# the virus scanner watches, so unpacked files get scanned like downloads.
+STAGING = os.environ.get("EXTRACT_DIR", "/data/downloads/roms/.unpacked")
+EXTRACT_MAX_GB = float(os.environ.get("EXTRACT_MAX_GB", "200"))        # per torrent
+EXTRACT_FREE_MARGIN_GB = float(os.environ.get("EXTRACT_FREE_MARGIN_GB", "20"))
+CART_EXT = {".nes", ".fds", ".unf", ".sfc", ".smc", ".z64", ".n64", ".v64", ".gb", ".gbc",
+            ".gba", ".nds", ".md", ".gen", ".smd", ".sms", ".gg", ".32x", ".pce", ".a26",
+            ".a78", ".lnx", ".ngp", ".ngc", ".ws", ".wsc", ".col", ".int", ".vb", ".min", ".rom"}
+EXEC_EXT = {".exe", ".dll", ".scr", ".com", ".msi", ".bat", ".cmd", ".ps1", ".vbs", ".js",
+            ".jar", ".lnk", ".sh", ".appimage", ".so", ".dylib"}
+_PART_RAR = re.compile(r"^(.*)\.part0*(\d+)\.rar$", re.I)
+_OLD_RAR = re.compile(r"^(.*)\.(rar|r\d{2,3})$", re.I)
+_NUMBERED = re.compile(r"^(.*\.(?:7z|zip|rar))\.0*(\d+)$", re.I)
+_SPLIT_ZIP = re.compile(r"^(.*)\.(zip|z\d{2})$", re.I)
+_SINGLE = re.compile(r"^(.*)\.(7z|zip)$", re.I)
+
+
+def _archive_key(p):
+    """-> (set key, is_first_volume, stem) or None when p is not an archive volume."""
+    d, b = os.path.dirname(p), os.path.basename(p)
+    m = _PART_RAR.match(b)
+    if m:
+        return (d, m.group(1).lower(), "partrar"), int(m.group(2)) == 1, m.group(1)
+    m = _NUMBERED.match(b)
+    if m:
+        stem = re.sub(r"\.(7z|zip|rar)$", "", m.group(1), flags=re.I)
+        return (d, m.group(1).lower(), "numbered"), int(m.group(2)) == 1, stem
+    m = _OLD_RAR.match(b)
+    if m:
+        return (d, m.group(1).lower(), "rar"), m.group(2).lower() == "rar", m.group(1)
+    m = _SPLIT_ZIP.match(b)
+    if m and m.group(2).lower() != "zip":
+        return (d, m.group(1).lower(), "zip"), False, m.group(1)
+    m = _SINGLE.match(b)
+    if m:
+        kind = "zip" if m.group(2).lower() == "zip" else "7z"
+        return (d, m.group(1).lower(), kind), True, m.group(1)
+    return None
+
+
+def archive_sets(files):
+    """Group (name, path) pairs into archive sets. -> (sets, other_files, notes)."""
+    sets, other, notes = {}, [], []
+    for name, p in files:
+        k = _archive_key(p)
+        if not k:
+            other.append((name, p))
+            continue
+        key, first, stem = k
+        s = sets.setdefault(key, {"stem": stem, "first": None, "volumes": [], "names": []})
+        s["volumes"].append(p)
+        s["names"].append(name)
+        if first:
+            s["first"] = p
+    out = []
+    for s in sets.values():
+        if not s["first"]:
+            notes.append(f"incomplete archive set {s['stem']} (first volume missing)")
+            continue
+        s["multi"] = len(s["volumes"]) > 1
+        s["tool"] = "rar" if s["first"].lower().endswith(".rar") else "7z"
+        out.append(s)
+    return out, other, notes
+
+
+def _run(cmd, timeout):
+    return subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                          errors="replace", timeout=timeout)
+
+
+def list_archive(s):
+    """-> [(member path, size)] files only, or None if unreadable/encrypted."""
+    if s["tool"] == "rar":
+        r = _run(["unrar", "lt", "-p-", s["first"]], 600)
+        if r.returncode != 0:
+            return None
+        out, cur = [], {}
+        for line in r.stdout.splitlines() + ["        Name: "]:
+            k, _, v = line.strip().partition(":")
+            k, v = k.strip(), v.strip()
+            if k == "Name":
+                if cur.get("Name") and cur.get("Type", "File") == "File":
+                    out.append((cur["Name"], int(cur.get("Size", "0") or 0)))
+                cur = {"Name": v}
+            elif k in ("Type", "Size"):
+                cur[k] = v
+        return out
+    r = _run(["7zz", "l", "-slt", "-ba", "-pnopassword", s["first"]], 600)
+    if r.returncode != 0:
+        return None
+    out, cur = [], {}
+    for line in r.stdout.splitlines() + ["Path = "]:
+        k, _, v = line.partition(" = ")
+        if k == "Path":
+            if cur.get("Path") and cur.get("Folder") != "+":
+                out.append((cur["Path"], int(cur.get("Size", "0") or 0)))
+            cur = {"Path": v}
+        elif k in ("Folder", "Size"):
+            cur[k] = v
+    return out
+
+
+# Platforms whose games emulators want as the zip itself (MAME/Neo Geo sets).
+KEEP_PACKED = {"neogeoaes", "neogeomvs", "arcade"}
+
+
+def needs_unpack(s, members, slug):
+    if slug in KEEP_PACKED:
+        return False
+    if s["multi"] or s["tool"] == "rar":
+        return True
+    exts = {os.path.splitext(m)[1].lower() for m, _ in members} - JUNK_EXT
+    return not exts <= CART_EXT   # disc images, folders of files, nested archives...
+
+
+def _unpack(s, outdir):
+    tmp = outdir + ".part"
+    if os.path.isdir(tmp):
+        shutil.rmtree(tmp)
+    os.makedirs(tmp)
+    if s["tool"] == "rar":
+        cmd = ["unrar", "x", "-p-", "-o+", "-y", "-idq", s["first"], tmp + "/"]
+    else:
+        cmd = ["7zz", "x", "-y", "-pnopassword", "-bso0", "-bsp0", f"-o{tmp}", s["first"]]
+    r = _run(cmd, 4 * 3600)
+    if r.returncode != 0:
+        shutil.rmtree(tmp, ignore_errors=True)
+        return (r.stderr or r.stdout).strip().splitlines()[-1:] or ["unpack failed"]
+    real = os.path.realpath(tmp)
+    now = time.time()
+    for root, dirs, fnames in os.walk(tmp):
+        for n in dirs + fnames:
+            q = os.path.join(root, n)
+            if os.path.islink(q) or not os.path.realpath(q).startswith(real + os.sep):
+                os.unlink(q)          # never follow links out of the staging folder
+            elif n in fnames:
+                os.utime(q, (now, now))  # fresh mtime: the virus scanner covers it next run
+    os.rename(tmp, outdir)
+    return None
+
+
+def unpack_torrent(h, sets, slug):
+    """Unpack what needs it into STAGING/<hash>/<n>/.
+    -> (status, detail, [(set, files)]) with status None when ready to link."""
+    stage = os.path.join(STAGING, h)
+    todo, kept, notes = [], [], []
+    for s in sets:
+        members = list_archive(s)
+        if members is None:
+            notes.append(f"can't read {os.path.basename(s['first'])} (damaged or password-protected), kept packed")
+            kept.append(s)
+        elif needs_unpack(s, members, slug):
+            # Split RAR5 members can under-report; never estimate below the packed size.
+            s["size"] = max(sum(sz for _, sz in members),
+                            sum(os.path.getsize(v) for v in s["volumes"]))
+            todo.append(s)
+        else:
+            kept.append(s)
+    if not todo:
+        return None, notes, [], kept
+    total = sum(s["size"] for s in todo)
+    if total > EXTRACT_MAX_GB * 1e9:
+        return "blocked", f"archives unpack to {total / 1e9:.0f} GB, over the {EXTRACT_MAX_GB:.0f} GB limit", [], kept
+    for i, s in enumerate(todo):
+        s["out"] = os.path.join(stage, str(i))
+        if os.path.isdir(s["out"]):
+            continue
+        os.makedirs(stage, exist_ok=True)
+        free = shutil.disk_usage(stage).free
+        if free - s["size"] < EXTRACT_FREE_MARGIN_GB * 1e9:
+            return "waiting", f"not enough disk space to unpack {s['stem']} ({s['size'] / 1e9:.1f} GB)", [], kept
+        set_status(h, "unpacking", f"unpacking {s['stem']} ({i + 1}/{len(todo)}, {s['size'] / 1e9:.1f} GB)")
+        log("unpacking", s["first"])
+        err = _unpack(s, s["out"])
+        if err:
+            notes.append(f"unpack failed for {s['stem']}: {err[0][:120]}, kept packed")
+            s["failed"] = True
+    todo_ok = [s for s in todo if not s.get("failed")]
+    kept += [s for s in todo if s.get("failed")]
+    done = []
+    newest = 0
+    for s in todo_ok:
+        files = []
+        for root, _, fnames in os.walk(s["out"]):
+            for n in fnames:
+                q = os.path.join(root, n)
+                files.append((os.path.relpath(q, s["out"]), q))
+                newest = max(newest, os.path.getmtime(q))
+        done.append((s, files))
+    if SCAN_STATE and done:
+        try:
+            if newest > os.path.getmtime(SCAN_STATE):
+                return "waiting", f"unpacked {len(done)} archive(s), waiting for virus scan", [], kept
+        except OSError:
+            return "waiting", "virus scanner state file not found", [], kept
+    return None, notes, done, kept
+
+
+def link_unpacked(done, slug, names, notes):
+    """Each unpacked archive = one game: a lone ROM file is linked flat,
+    anything else becomes a folder named after the archive (or its single top folder)."""
+    dest_dir = os.path.join(LIBRARY, slug)
+    linked = 0
+    for s, files in done:
+        keep = []
+        for rel, q in files:
+            ext = os.path.splitext(rel)[1].lower()
+            if ext in JUNK_EXT or os.path.basename(rel).startswith("."):
+                continue
+            if ext in EXEC_EXT:
+                notes.append(f"skipped program {os.path.basename(rel)}")
+                continue
+            keep.append((rel, q))
+        roms, bios, extras = split_files([(f"x/{rel}", q) for rel, q in keep])
+        if extras:
+            notes.append(f"skipped {len(extras)} emulator/tool file(s) in {s['stem']}")
+        if bios:
+            _, d = import_bios(bios, slug)
+            notes.append(f"BIOS: {d}")
+        rels = [(n[2:], q) for n, q in roms]
+        if not rels:
+            continue
+        tops = {r.split("/", 1)[0] for r, _ in rels}
+        game = s["stem"]
+        if len(tops) == 1 and all("/" in r for r, _ in rels):
+            game = tops.pop()
+            rels = [(r.split("/", 1)[1], q) for r, q in rels]
+        if len(rels) == 1 and os.path.splitext(rels[0][0])[1].lower() in STANDALONE_EXT | CART_EXT:
+            top = safe_name(os.path.basename(rels[0][0]))
+            linked += link(rels[0][1], os.path.join(dest_dir, top))
+            names.add(top)
+            continue
+        for r, q in rels:
+            linked += link(q, os.path.join(dest_dir, safe_name(game), *[safe_name(x) for x in r.split("/")]))
+        names.add(safe_name(game))
     return linked
 
 
