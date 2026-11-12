@@ -3305,6 +3305,8 @@ def list_requests(uname, can_approve):
 #   "New Game": posted once the game is in RomM with its database match applied.
 # One worker thread sends them in order, so an edit never overtakes the post it edits.
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")   # e.g. https://roms.example.com
+# Discord role pinged when a game request needs approval (role ID, digits only). Optional.
+APPROVER_ROLE = re.sub(r"\D", "", os.environ.get("NOTIFY_APPROVER_ROLE_ID", ""))
 _NQ = None
 _UA = "RomSeek (+https://github.com/Evident-Dev/romseek)"   # Discord's Cloudflare blocks Python's default UA
 
@@ -3336,9 +3338,13 @@ def _buttons(*links):
     return [{"type": 1, "components": row}] if row else []
 
 
-def _discord(embed, msg_id=None, buttons=()):
-    """Post (returns the message id) or edit an earlier message."""
-    body = json.dumps({"embeds": [embed], "components": list(buttons), "allowed_mentions": {"parse": []}}).encode()
+def _discord(embed, msg_id=None, buttons=(), ping_role=""):
+    """Post (returns the message id) or edit an earlier message. ping_role mentions a role (posts only)."""
+    msg = {"embeds": [embed], "components": list(buttons), "allowed_mentions": {"parse": []}}
+    if ping_role and not msg_id:
+        msg["content"] = f"<@&{ping_role}> a game request is waiting for approval"
+        msg["allowed_mentions"] = {"parse": [], "roles": [ping_role]}
+    body = json.dumps(msg).encode()
     hdr = {"Content-Type": "application/json", "User-Agent": _UA}
     base = NOTIFY_WEBHOOK.split("?")[0]
     if msg_id:
@@ -3417,7 +3423,8 @@ def notify_request(r):
             add("📦 Download", _trim(snap["title"], 200), False)
         add("📊 Status", req_status_text(snap), False)
         btn = _buttons(("View Request", f"{PUBLIC_URL}/#requests" if PUBLIC_URL else "", "📋"))
-        mid = _discord(e, snap.get("discord"), btn)
+        ping = APPROVER_ROLE if snap.get("status") == "pending" else ""
+        mid = _discord(e, snap.get("discord"), btn, ping)
         if mid and not snap.get("discord"):
             with REQ_LOCK:
                 live = next((x for x in _REQ if x["id"] == snap["id"]), None)
