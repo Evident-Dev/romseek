@@ -3329,16 +3329,24 @@ def _queue(job):
     _NQ.put(job)
 
 
-def _discord(embed, msg_id=None):
+def _buttons(*links):
+    """Link buttons under the card: (label, url, emoji). with_components=true lets a plain webhook send them."""
+    row = [{"type": 2, "style": 5, "label": label, "url": url, **({"emoji": {"name": emoji}} if emoji else {})}
+           for label, url, emoji in links if url]
+    return [{"type": 1, "components": row}] if row else []
+
+
+def _discord(embed, msg_id=None, buttons=()):
     """Post (returns the message id) or edit an earlier message."""
-    body = json.dumps({"embeds": [embed], "allowed_mentions": {"parse": []}}).encode()
+    body = json.dumps({"embeds": [embed], "components": list(buttons), "allowed_mentions": {"parse": []}}).encode()
     hdr = {"Content-Type": "application/json", "User-Agent": _UA}
     base = NOTIFY_WEBHOOK.split("?")[0]
     if msg_id:
-        req = urllib.request.Request(f"{base}/messages/{msg_id}", data=body, headers=hdr, method="PATCH")
+        req = urllib.request.Request(f"{base}/messages/{msg_id}?with_components=true", data=body, headers=hdr,
+                                     method="PATCH")
         urllib.request.urlopen(req, timeout=20).read()
         return msg_id
-    return json.loads(http(base + "?wait=true", body, hdr, timeout=20).read()).get("id")
+    return json.loads(http(base + "?wait=true&with_components=true", body, hdr, timeout=20).read()).get("id")
 
 
 def _trim(text, n):
@@ -3408,7 +3416,8 @@ def notify_request(r):
         if not m:
             add("📦 Download", _trim(snap["title"], 200), False)
         add("📊 Status", req_status_text(snap), False)
-        mid = _discord(e, snap.get("discord"))
+        btn = _buttons(("View Request", f"{PUBLIC_URL}/#requests" if PUBLIC_URL else "", "📋"))
+        mid = _discord(e, snap.get("discord"), btn)
         if mid and not snap.get("discord"):
             with REQ_LOCK:
                 live = next((x for x in _REQ if x["id"] == snap["id"]), None)
@@ -3430,12 +3439,13 @@ def notify_new_game(r, name, rom_id=None, games=1):
                             snap.get("match"), snap["platform"], snap["user"], snap.get("rating"))
         if games > 1:
             add("📦 Pack", f"{games} games")
+        btn = []
         if url and rom_id:
-            # Webhooks can't send real buttons; a link field, like the movie cards' "Watch".
-            play = (f"[▶️ Play in Browser]({url}/ejs) · [View in RomM]({url})" if snap["platform"] in BROWSER
-                    else f"[View in RomM]({url})")
-            add("🎮 Play", play, False)
-        _discord(e)
+            btn = _buttons(("Play in Browser", f"{url}/ejs" if snap["platform"] in BROWSER else "", "🎮"),
+                           ("View in RomM", url, "🕹️"))
+        elif url:
+            btn = _buttons(("Open RomM", url, "🕹️"))
+        _discord(e, buttons=btn)
         log("notified new game:", name)
     _queue(job)
 
