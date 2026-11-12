@@ -2775,7 +2775,7 @@ def lb_build():
                 break
             f.write(b)
     slug_of = {n: s for s, names in LB_PLATFORMS.items() for n in names}
-    games, alts, covers = {}, {}, {}
+    games, alts, covers, arts, details = {}, {}, {}, {}, {}
     rank = {"North America": 4, "United States": 4, None: 3, "World": 2}
     try:
         with zipfile.ZipFile(part) as z, z.open("Metadata.xml") as xf:
@@ -2796,11 +2796,20 @@ def lb_build():
                             y = el.findtext("ReleaseYear") or (el.findtext("ReleaseDate") or "")[:4]
                             games[gid] = [gid, el.findtext("Name") or "", slug, lb_rating(el.findtext("ESRB")),
                                           int(y) if y.isdigit() else None, "", []]
+                            details[gid] = _lb_detail_row(gid, el)
                 elif el.tag == "GameAlternateName":
                     try:
                         alts.setdefault(int(el.findtext("DatabaseID")), []).append(el.findtext("AlternateName") or "")
                     except (TypeError, ValueError):
                         pass
+                elif el.findtext("Type") in ART_TYPES:
+                    try:
+                        gid = int(el.findtext("DatabaseID"))
+                    except (TypeError, ValueError):
+                        gid = None
+                    sc = ART_TYPES[el.findtext("Type")] * 10 + rank.get(el.findtext("Region"), 1)
+                    if gid and sc > arts.get(gid, (0, ""))[0]:
+                        arts[gid] = (sc, el.findtext("FileName") or "")
                 elif el.findtext("Type") == "Box - Front":
                     try:
                         gid = int(el.findtext("DatabaseID"))
@@ -2825,7 +2834,63 @@ def lb_build():
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump({"t": int(time.time()), "games": list(games.values())}, f, ensure_ascii=False)
     os.replace(tmp, LB_FILE)
+    lb_write_details(details, arts)
     log(f"game database: {len(games)} games indexed")
+
+
+# Extra per-game details for notices (description, genres, players, background art). Kept in
+# SQLite and read one game at a time, so the in-memory index stays small.
+LB_DETAILS = os.path.join(STATE_DIR, "launchbox-details.sqlite")
+LB_IMG = "https://images.launchbox-app.com/"
+ART_TYPES = {"Fanart - Background": 3, "Screenshot - Gameplay": 2, "Screenshot - Game Title": 1}
+
+
+def _lb_detail_row(gid, el):
+    def num(tag):
+        try:
+            return float(el.findtext(tag) or "")
+        except ValueError:
+            return None
+    overview = re.sub(r"\s+", " ", el.findtext("Overview") or "").strip()
+    return (gid, overview[:900], (el.findtext("Genres") or "").replace(";", ","), el.findtext("Developer") or "",
+            el.findtext("Publisher") or "", num("CommunityRating"), el.findtext("MaxPlayers") or "",
+            el.findtext("ESRB") or "", "")
+
+
+def lb_write_details(details, arts):
+    import sqlite3
+    tmp = LB_DETAILS + ".tmp"
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
+    db = sqlite3.connect(tmp)
+    db.execute("create table d (id integer primary key, overview text, genres text, developer text, publisher text,"
+               " community real, players text, esrb text, art text)")
+    db.executemany("insert into d values (?,?,?,?,?,?,?,?,?)",
+                   [row[:8] + (arts.get(gid, (0, ""))[1],) for gid, row in details.items()])
+    db.commit()
+    db.close()
+    os.replace(tmp, LB_DETAILS)
+
+
+def lb_details(gid):
+    """{overview, genres, developer, publisher, community, players, esrb, art (full URL)} or {}."""
+    import sqlite3
+    try:
+        db = sqlite3.connect(f"file:{LB_DETAILS}?mode=ro", uri=True)
+        try:
+            row = db.execute("select overview, genres, developer, publisher, community, players, esrb, art"
+                             " from d where id=?", (int(gid),)).fetchone()
+        finally:
+            db.close()
+    except Exception:
+        return {}
+    if not row:
+        return {}
+    d = dict(zip(("overview", "genres", "developer", "publisher", "community", "players", "esrb", "art"), row))
+    d["art"] = LB_IMG + d["art"] if d["art"] else ""
+    return d
 
 
 _DISC_RX = re.compile(r"\b(disc|disk|cd|dvd)\s*\d+\b|\b\d+\s*(discs|disks|cds)\b", re.I)
@@ -2873,7 +2938,7 @@ def lb_load():
 def lb_loop():
     lb_load()
     while True:
-        if time.time() - _LB["t"] > LB_DAYS * 86400:
+        if time.time() - _LB["t"] > LB_DAYS * 86400 or not os.path.exists(LB_DETAILS):
             _LB["building"] = True
             try:
                 lb_build()
@@ -3112,9 +3177,11 @@ def make_request(uname, u, perms, body):
         _store(rec)
         audit(uname, "request.auto_approved", title, kind=kind, platform=slug, profile=prof, rating=rating,
               match=(match or {}).get("name"))
+        notify_request(rec)
     else:
         _store(rec)
         audit(uname, "request.created", title, kind=kind, platform=slug, rating=rating, match=(match or {}).get("name"))
+        notify_request(rec)
         log("request queued:", uname, kind, slug, title)
     return {"status": rec["status"], "id": rec["id"], "profile": prof, "rating": rating, "match": match,
             "new_platform": new_platform}
@@ -3191,6 +3258,7 @@ def decide_request(rid, approve, me, note=""):
     r.update(status="approved" if approve else "denied", decided_by=me, decided_t=int(time.time()), note=note, error=None)
     with REQ_LOCK:
         save_requests()
+    notify_request(r)
     audit(me, "request." + r["status"], r["title"], kind=r["kind"], platform=r["platform"], requested_by=r["user"], note=note)
     return public_request(r, True)
 
@@ -3206,6 +3274,7 @@ def cancel_request(rid, me, can_approve):
         if r["kind"] == "upload":
             _drop_stage(r)
         save_requests()
+    notify_request(r)
     audit(me, "request.cancelled", r["title"], kind=r["kind"], platform=r["platform"], requested_by=r["user"])
     return {"ok": True}
 
@@ -3229,31 +3298,146 @@ def list_requests(uname, can_approve):
     return {"pending": pending, "history": done, "can_approve": can_approve}
 
 
-def notify_new_game(name, slug, user="", cover="", rom_id=None, games=1):
-    """Discord notice for a new game in RomM (NOTIFY_WEBHOOK_URL). Runs in the background."""
+# ---------------------------------------------------------------- Discord notices
+# NOTIFY_WEBHOOK_URL gets two kinds of card, laid out like Havoc's movie notices:
+#   "New Request — Game": posted when a game is requested; its Status field is edited in
+#   place (waiting → downloading → in RomM / denied / blocked).
+#   "New Game": posted once the game is in RomM with its database match applied.
+# One worker thread sends them in order, so an edit never overtakes the post it edits.
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")   # e.g. https://roms.example.com
+_NQ = None
+_UA = "RomSeek (+https://github.com/Evident-Dev/romseek)"   # Discord's Cloudflare blocks Python's default UA
+
+
+def _notify_worker():
+    while True:
+        job = _NQ.get()
+        try:
+            job()
+        except Exception as e:
+            log("discord notice failed:", repr(e))
+
+
+def _queue(job):
+    global _NQ
     if not NOTIFY_WEBHOOK:
         return
-    with AUTH_LOCK:
-        who = ((_DB.get("users") or {}).get(user) or {}).get("name") or user
-    embed = {"title": name[:250], "color": 0x5B9BD5,
-             "description": f"New on **{LABEL.get(slug, slug)}**" + (f" · pack of {games} games" if games > 1 else ""),
-             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-    if ROMM_PUBLIC:
-        embed["url"] = f"{ROMM_PUBLIC}/rom/{rom_id}" if rom_id else ROMM_PUBLIC
-    if cover:
-        embed["image"] = {"url": cover}
-    if who:
-        embed["footer"] = {"text": f"Requested by {who}"}
-    body = json.dumps({"embeds": [embed], "allowed_mentions": {"parse": []}}).encode()
+    if _NQ is None:
+        import queue
+        _NQ = queue.Queue()
+        threading.Thread(target=_notify_worker, daemon=True).start()
+    _NQ.put(job)
 
-    def send():
-        try:   # Discord's Cloudflare front rejects Python's default User-Agent.
-            http(NOTIFY_WEBHOOK, body, {"Content-Type": "application/json",
-                                        "User-Agent": "RomSeek (+https://github.com/Evident-Dev/romseek)"}, timeout=20).read()
-            log("notified new game:", name)
-        except Exception as e:
-            log("new-game notice failed:", name, repr(e))
-    threading.Thread(target=send, daemon=True).start()
+
+def _discord(embed, msg_id=None):
+    """Post (returns the message id) or edit an earlier message."""
+    body = json.dumps({"embeds": [embed], "allowed_mentions": {"parse": []}}).encode()
+    hdr = {"Content-Type": "application/json", "User-Agent": _UA}
+    base = NOTIFY_WEBHOOK.split("?")[0]
+    if msg_id:
+        req = urllib.request.Request(f"{base}/messages/{msg_id}", data=body, headers=hdr, method="PATCH")
+        urllib.request.urlopen(req, timeout=20).read()
+        return msg_id
+    return json.loads(http(base + "?wait=true", body, hdr, timeout=20).read()).get("id")
+
+
+def _trim(text, n):
+    text = (text or "").strip()
+    return text if len(text) <= n else text[:n].rsplit(" ", 1)[0].rstrip(",.;:") + "…"
+
+
+def _who(user):
+    with AUTH_LOCK:
+        return ((_DB.get("users") or {}).get(user) or {}).get("name") or user or "Someone"
+
+
+def _game_card(author, color, footer, title, url, match, platform, user, fallback_rating=None):
+    """Shared layout: cover thumbnail, description, background art, then fields."""
+    d = lb_details(match["id"]) if match and match.get("id") else {}
+    year = (match or {}).get("year")
+    e = {"author": {"name": author}, "title": _trim(f"{title} ({year})" if year and str(year) not in title else title, 250),
+         "color": color, "fields": [], "footer": {"text": footer},
+         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    if url:
+        e["url"] = url
+    if d.get("overview"):
+        e["description"] = _trim(d["overview"], 350)
+    if (match or {}).get("cover"):
+        e["thumbnail"] = {"url": match["cover"]}
+    if d.get("art"):
+        e["image"] = {"url": d["art"]}
+
+    def add(name, value, inline=True):
+        if value:
+            e["fields"].append({"name": name, "value": str(value)[:1024], "inline": inline})
+    add("🙋 Requested by", _who(user))
+    add("🕹️ Platform", LABEL.get(platform, platform))
+    add("🔞 Rated", d.get("esrb") or (match or {}).get("rating") or fallback_rating)
+    add("🎭 Genres", ", ".join(g.strip() for g in (d.get("genres") or "").split(",")[:3] if g.strip()))
+    add("👥 Players", d.get("players"))
+    if d.get("community"):
+        add("⭐ Rating", f"{d['community']:.1f}/5")
+    add("🏢 Developer", d.get("developer"))
+    return e, add
+
+
+def req_status_text(r):
+    st, imp = r.get("status"), r.get("imported")
+    if imp == "imported":
+        return "✅ In RomM"
+    if imp:
+        return "🛑 Blocked by the virus scan"
+    note = f"\n“{_trim(r['note'], 200)}”" if r.get("note") else ""
+    return {"pending": "⏳ Waiting for approval", "working": "⏳ Waiting for approval",
+            "approved": "⬇️ Approved · downloading", "denied": "❌ Denied" + note,
+            "cancelled": "🚫 Cancelled", "failed": "⚠️ Couldn't start the download"}.get(st, st or "?")
+
+
+def notify_request(r):
+    """Post or update the request card for a game request."""
+    if r.get("kind") != "rom" or not NOTIFY_WEBHOOK:
+        return
+    snap = json.loads(json.dumps(r))
+
+    def job():
+        m = snap.get("match")
+        e, add = _game_card("🙋 New Request — Game", 0xF5A623, "Havoc Society • Game Requests",
+                            (m or {}).get("name") or clean_term(snap["title"]) or snap["title"],
+                            f"{PUBLIC_URL}/#requests" if PUBLIC_URL else None, m, snap["platform"], snap["user"],
+                            snap.get("rating"))
+        if not m:
+            add("📦 Download", _trim(snap["title"], 200), False)
+        add("📊 Status", req_status_text(snap), False)
+        mid = _discord(e, snap.get("discord"))
+        if mid and not snap.get("discord"):
+            with REQ_LOCK:
+                live = next((x for x in _REQ if x["id"] == snap["id"]), None)
+                if live is not None:
+                    live["discord"] = mid
+                    save_requests()
+    _queue(job)
+
+
+def notify_new_game(r, name, rom_id=None, games=1):
+    """The "New Game" card once it's in RomM."""
+    if not NOTIFY_WEBHOOK:
+        return
+    snap = json.loads(json.dumps(r))
+
+    def job():
+        url = (f"{ROMM_PUBLIC}/rom/{rom_id}" if rom_id else ROMM_PUBLIC) if ROMM_PUBLIC else None
+        e, add = _game_card("🎮 New Game", 0x5B9BD5, "Havoc Society • New Games", name, url,
+                            snap.get("match"), snap["platform"], snap["user"], snap.get("rating"))
+        if games > 1:
+            add("📦 Pack", f"{games} games")
+        if url and rom_id:
+            # Webhooks can't send real buttons; a link field, like the movie cards' "Watch".
+            play = (f"[▶️ Play in Browser]({url}/ejs) · [View in RomM]({url})" if snap["platform"] in BROWSER
+                    else f"[View in RomM]({url})")
+            add("🎮 Play", play, False)
+        _discord(e)
+        log("notified new game:", name)
+    _queue(job)
 
 
 def req_imported(tags, t, slug, kind, state, detail):
@@ -3268,11 +3452,12 @@ def req_imported(tags, t, slug, kind, state, detail):
                 r["imported"] = state
                 games = t.get("_games") or []
                 if state == "imported" and r.get("match") and kind == "rom" and len(games) == 1:
-                    # The notice waits for the match to be applied (apply_pending_meta).
+                    # The New Game notice waits for the match to be applied (apply_pending_meta).
                     r["apply"] = {"fs_name": games[0], "since": int(time.time())}
                 elif state == "imported" and kind == "rom":
-                    notify_new_game(clean_term(r["title"]) or r["title"], slug, who, games=max(len(games), 1))
+                    notify_new_game(r, clean_term(r["title"]) or r["title"], games=max(len(games), 1))
                 save_requests()
+                notify_request(r)
     audit("system", "download." + state, t["name"], platform=slug, kind=kind, requested_by=who, detail=detail)
 
 
@@ -3296,7 +3481,7 @@ def apply_pending_meta():
                 audit("system", "meta.apply", a["fs_name"], platform=r["platform"], match=r["match"]["name"], request=r["id"])
             except Exception as e:
                 log("couldn't apply approved match:", a["fs_name"], repr(e))
-            notify_new_game(name, r["platform"], r["user"], r["match"].get("cover") or "", rom["id"])
+            notify_new_game(r, name, rom["id"])
         if rom or time.time() - a["since"] > 2 * 86400:
             with REQ_LOCK:
                 r.pop("apply", None)
