@@ -438,10 +438,13 @@ def library():
 def add_platform(slug):
     if slug not in SLUGS:
         raise ValueError("unknown platform")
+    new = not platform_exists(slug)
     os.makedirs(os.path.join(LIBRARY, slug), exist_ok=True)
     if slug in BIOS:
         os.makedirs(os.path.join(FIRMWARE, slug), exist_ok=True)
-    log("platform added", slug)
+    if new:
+        log("platform added", slug)
+        notify_emulator("platform", slug)
     return platform_info(slug)
 
 
@@ -939,6 +942,8 @@ def import_bios(wanted, slug):
     if kept:
         parts.append(f"{kept} archive(s) kept whole" if (is_pack or archives) else f"{kept} file(s)")
     detail = (", ".join(parts) or "nothing new") + f" -> bios/{slug}" + (f" ({'; '.join(notes)})" if notes else "")
+    if n or kept:
+        notify_emulator("bios", slug, ", ".join(parts))
     return "imported", detail
 
 
@@ -2737,7 +2742,10 @@ def audit_read(user="", action="", q="", before=0, limit=200):
 # when an auto-approval profile depends on the rating, as before.
 CONFIRM_MATCH = os.environ.get("CONFIRM_MATCH", "true").strip().lower() not in ("0", "false", "no", "off")
 # Optional Discord webhook: a notice with the cover when a new game lands in RomM.
-NOTIFY_WEBHOOK = os.environ.get("NOTIFY_WEBHOOK_URL", "").strip()
+NOTIFY_WEBHOOK = os.environ.get("NOTIFY_WEBHOOK_URL", "").strip()          # New Game cards
+# Optional separate channels; each falls back to NOTIFY_WEBHOOK_URL when unset.
+REQUESTS_WEBHOOK = os.environ.get("REQUESTS_WEBHOOK_URL", "").strip()      # request cards (shared with other apps)
+EMULATOR_WEBHOOK = os.environ.get("EMULATOR_WEBHOOK_URL", "").strip()      # new platforms + BIOS
 LB_URL = os.environ.get("LAUNCHBOX_METADATA_URL", "https://gamesdb.launchbox-app.com/Metadata.zip")
 LB_FILE = os.path.join(STATE_DIR, "launchbox.json")
 LB_DAYS = int(os.environ.get("LAUNCHBOX_REFRESH_DAYS", "7"))
@@ -3322,7 +3330,7 @@ def _notify_worker():
 
 def _queue(job):
     global _NQ
-    if not NOTIFY_WEBHOOK:
+    if not (NOTIFY_WEBHOOK or REQUESTS_WEBHOOK or EMULATOR_WEBHOOK):
         return
     if _NQ is None:
         import queue
@@ -3338,15 +3346,16 @@ def _buttons(*links):
     return [{"type": 1, "components": row}] if row else []
 
 
-def _discord(embed, msg_id=None, buttons=(), ping_role=""):
-    """Post (returns the message id) or edit an earlier message. ping_role mentions a role (posts only)."""
+def _discord(embed, msg_id=None, buttons=(), ping_role="", webhook=None):
+    """Post (returns the message id) or edit an earlier message. ping_role mentions a role (posts only).
+    webhook defaults to NOTIFY_WEBHOOK_URL; an edit must use the webhook that posted the message."""
     msg = {"embeds": [embed], "components": list(buttons), "allowed_mentions": {"parse": []}}
     if ping_role and not msg_id:
         msg["content"] = f"<@&{ping_role}> a game request is waiting for approval"
         msg["allowed_mentions"] = {"parse": [], "roles": [ping_role]}
     body = json.dumps(msg).encode()
     hdr = {"Content-Type": "application/json", "User-Agent": _UA}
-    base = NOTIFY_WEBHOOK.split("?")[0]
+    base = (webhook or NOTIFY_WEBHOOK).split("?")[0]
     if msg_id:
         req = urllib.request.Request(f"{base}/messages/{msg_id}?with_components=true", data=body, headers=hdr,
                                      method="PATCH")
@@ -3409,13 +3418,17 @@ def req_status_text(r):
 
 def notify_request(r):
     """Post or update the request card for a game request."""
-    if r.get("kind") != "rom" or not NOTIFY_WEBHOOK:
+    if r.get("kind") != "rom" or not (REQUESTS_WEBHOOK or NOTIFY_WEBHOOK):
         return
     snap = json.loads(json.dumps(r))
+    # Cards posted before 2026-11-16 live in the roms channel and can only be
+    # edited through the webhook that posted them ("discord_hook" unset).
+    hook = (REQUESTS_WEBHOOK or NOTIFY_WEBHOOK) if (not snap.get("discord") or snap.get("discord_hook") == "requests") \
+        else NOTIFY_WEBHOOK
 
     def job():
         m = snap.get("match")
-        e, add = _game_card("🙋 New Request — Game", 0xF5A623, "Havoc Society • Game Requests",
+        e, add = _game_card("🙋 New Request — Game", 0xF5A623, "Havoc Society • Requests",
                             (m or {}).get("name") or clean_term(snap["title"]) or snap["title"],
                             f"{PUBLIC_URL}/#requests" if PUBLIC_URL else None, m, snap["platform"], snap["user"],
                             snap.get("rating"))
@@ -3424,12 +3437,14 @@ def notify_request(r):
         add("📊 Status", req_status_text(snap), False)
         btn = _buttons(("View Request", f"{PUBLIC_URL}/#requests" if PUBLIC_URL else "", "📋"))
         ping = APPROVER_ROLE if snap.get("status") == "pending" else ""
-        mid = _discord(e, snap.get("discord"), btn, ping)
+        mid = _discord(e, snap.get("discord"), btn, ping, webhook=hook)
         if mid and not snap.get("discord"):
             with REQ_LOCK:
                 live = next((x for x in _REQ if x["id"] == snap["id"]), None)
                 if live is not None:
                     live["discord"] = mid
+                    if REQUESTS_WEBHOOK:
+                        live["discord_hook"] = "requests"
                     save_requests()
     _queue(job)
 
@@ -3454,6 +3469,40 @@ def notify_new_game(r, name, rom_id=None, games=1):
             btn = _buttons(("Open RomM", url, "🕹️"))
         _discord(e, buttons=btn)
         log("notified new game:", name)
+    _queue(job)
+
+
+def notify_emulator(what, slug, detail=""):
+    """Emulators channel: a platform appears in the library, or BIOS/firmware lands for one."""
+    hook = EMULATOR_WEBHOOK or NOTIFY_WEBHOOK
+    if not hook:
+        return
+    label = LABEL.get(slug, slug)
+    url = ROMM_PUBLIC or None
+
+    def job():
+        if what == "platform":
+            e = {"author": {"name": "🕹️ New Platform"}, "title": label, "color": 0x8E44AD,
+                 "description": f"**{label}** games can now be requested and played on Havoc Society."}
+        else:
+            e = {"author": {"name": "💾 BIOS Added"}, "title": f"{label} BIOS / firmware", "color": 0x16A085,
+                 "description": f"New BIOS/firmware for **{label}** is in the library."}
+        e.update({"fields": [], "footer": {"text": "Havoc Society • Emulators"},
+                  "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+        if url:
+            e["url"] = url
+
+        def add(name, value, inline=True):
+            if value:
+                e["fields"].append({"name": name, "value": str(value)[:1024], "inline": inline})
+        add("🌐 Play in browser", "Yes" if slug in BROWSER else "No (download to play)")
+        if what == "platform":
+            add("💾 BIOS", BIOS_NOTE.get(slug) or ("Needed" if slug in BIOS else "Not needed"), False)
+        else:
+            add("📦 Files", detail)
+            add("ℹ️ Note", BIOS_NOTE.get(slug), False)
+        _discord(e, buttons=_buttons(("Open RomM", url, "🕹️")), webhook=hook)
+        log("notified emulator:", what, slug)
     _queue(job)
 
 
