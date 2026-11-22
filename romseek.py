@@ -58,6 +58,9 @@ PLATFORMS = [
     ("ngc", "GameCube", r"gamecube|\bngc\b|\bgc\b|\bgcm\b|\bgcz\b|(moon|stinky|purple)cube"),
     ("wii", "Wii", r"\bwii\b(?! ?u)|\bwbfs\b"),
     ("wiiu", "Wii U", r"wii ?u\b"),
+    # Before "switch": first match wins and Switch 2 releases also say nsp/xci.
+    # "switch 2.0.1" (an update version) is not Switch 2.
+    ("switch-2", "Switch 2", r"\bswitch ?2\b(?!\s*[.\d])|\bns ?2\b|\bnsw ?2\b"),
     ("switch", "Switch", r"\bswitch\b|\bnsp\b|\bxci\b"),
     ("genesis", "Genesis / Mega Drive", r"genesis|mega ?drive|\.md\b|\.gen\b"),
     ("sms", "Master System", r"master system|\.sms\b"),
@@ -93,7 +96,7 @@ BIOS = {
     "neogeomvs": "required", "ps2": "required", "dc": "recommended",
     "psx": "recommended", "arcade": "some games",
     "gba": "optional", "nds": "optional",
-    "xbox": "required", "ps3": "required", "psvita": "required", "switch": "required",
+    "xbox": "required", "ps3": "required", "psvita": "required", "switch": "required", "switch-2": "required",
     "wiiu": "some games", "3ds": "some games",
 }
 # One-line explanation shown on the platform card.
@@ -104,6 +107,7 @@ BIOS_NOTE = {
     "ps3": "RPCS3 needs Sony's PS3 system software (PS3UPDAT.PUP). It's a free download from Sony.",
     "psvita": "Vita3K needs Sony's PS Vita firmware (PSVUPDAT.PUP). It's a free download from Sony.",
     "switch": "Needs system files dumped from your own Switch. Follow your emulator's setup guide.",
+    "switch-2": "Needs system files dumped from your own Switch 2.",
     "wiiu": "Encrypted games need files dumped from your own Wii U (see Cemu's setup guide); decrypted dumps play without them.",
     "3ds": "Encrypted games need files dumped from your own 3DS (see Azahar's setup guide); decrypted games play without them.",
     "segacd": "Needs the Sega CD / Mega-CD BIOS for your region.",
@@ -127,10 +131,10 @@ BIOS_QUERY = {
 }
 # Systems whose files must come from the user's own console: no search presets,
 # only "dump it yourself" guidance and the Upload button.
-BIOS_DUMP_ONLY = {"switch", "wiiu", "3ds"}
+BIOS_DUMP_ONLY = {"switch", "switch-2", "wiiu", "3ds"}
 # Firmware RomM wants as the zip itself (e.g. neogeo.zip), never extracted.
 KEEP_ZIP = {"neogeoaes", "neogeomvs", "arcade",
-            "switch"}  # Switch emulators install firmware from the zip itself
+            "switch", "switch-2"}  # Switch emulators install firmware from the zip itself
 # A BIOS zip is only unpacked when it is small; anything bigger is a firmware
 # pack/collection and is kept as the archive (hardlinked: no extra disk space).
 EXTRACT_MAX_MEMBERS = 64
@@ -493,6 +497,7 @@ def title_key(title):
     """Normalized game title: drop [groups]/(tags), punctuation, release words."""
     t = re.sub(r"\[[^\]]*\]|\([^)]*\)|\{[^}]*\}", " ", title.lower())
     t = re.sub(r"\bv?\d+(\.\d+)+\b", " ", t)          # version numbers
+    t = re.sub(r"\b(nintendo )?switch ?2( edition)?\b|\bnsw? ?2\b", " ", t)  # platform, not a sequel number
     words = [w for w in re.split(r"[^a-z0-9]+", t) if w and w not in _RELEASE_WORDS]
     return " ".join(words)
 
@@ -2754,7 +2759,7 @@ LB_PLATFORMS = {
     "n64": ["Nintendo 64"], "gb": ["Nintendo Game Boy"], "gbc": ["Nintendo Game Boy Color"],
     "gba": ["Nintendo Game Boy Advance"], "nds": ["Nintendo DS"], "3ds": ["Nintendo 3DS"],
     "ngc": ["Nintendo GameCube"], "wii": ["Nintendo Wii"], "wiiu": ["Nintendo Wii U"],
-    "switch": ["Nintendo Switch"], "genesis": ["Sega Genesis"], "sms": ["Sega Master System"],
+    "switch": ["Nintendo Switch"], "switch-2": ["Nintendo Switch 2"], "genesis": ["Sega Genesis"], "sms": ["Sega Master System"],
     "gamegear": ["Sega Game Gear"], "segacd": ["Sega CD", "Sega CD 32X"], "sega32": ["Sega 32X"],
     "saturn": ["Sega Saturn"], "dc": ["Sega Dreamcast"], "psx": ["Sony Playstation"],
     "ps2": ["Sony Playstation 2"], "psp": ["Sony PSP"], "psvita": ["Sony Playstation Vita"],
